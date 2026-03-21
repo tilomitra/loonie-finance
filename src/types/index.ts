@@ -78,6 +78,7 @@ export interface UserProfile {
   rrspCumulativeContributions: string
   fhsaCumulativeContributions: string
   fhsaFirstHomeOwner: boolean
+  openaiApiKey?: string
   createdAt: number
   updatedAt: number
 }

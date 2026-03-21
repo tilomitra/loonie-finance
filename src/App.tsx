@@ -6,6 +6,7 @@ import { AccountDetail } from '@/pages/AccountDetail'
 import { Projections } from '@/pages/Projections'
 import { Fire } from '@/pages/Fire'
 import { Tax } from '@/pages/Tax'
+import { Advisor } from '@/pages/Advisor'
 import { SettingsPage } from '@/pages/Settings'
 import { ImportExport } from '@/pages/ImportExport'
 
@@ -20,6 +21,7 @@ export default function App() {
           <Route path="/projections" element={<Projections />} />
           <Route path="/fire" element={<Fire />} />
           <Route path="/tax" element={<Tax />} />
+          <Route path="/advisor" element={<Advisor />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/import-export" element={<ImportExport />} />
         </Route>
