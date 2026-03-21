@@ -9,7 +9,7 @@ const makeAccount = (overrides: Partial<Account> = {}): Account => ({
   balance: '100000',
   currency: 'CAD',
   institution: '',
-  assetAllocation: { stocks: 100, bonds: 0, cash: 0, other: 0 },
+  expectedReturnRate: '7.0',
   contributionRoom: null,
   interestRate: null,
   notes: '',
@@ -20,12 +20,9 @@ const makeAccount = (overrides: Partial<Account> = {}): Account => ({
 
 const defaultAssumptions: ScenarioAssumptions = {
   inflationRate: '0.02',
-  stockReturn: '0.07',
-  bondReturn: '0.035',
-  cashReturn: '0.02',
   salaryGrowthRate: '0.03',
   retirementAge: 65,
-  lifeExpectancy: 40, // Only project to age 40 for test
+  lifeExpectancy: 40,
   cppStartAge: 65,
   oasStartAge: 65,
   province: 'ON',
@@ -46,7 +43,7 @@ describe('Project Net Worth', () => {
     expect(result).toHaveLength(0)
   })
 
-  it('should grow a 100% stock account at the stock return rate', () => {
+  it('should grow an account at its expected return rate', () => {
     const result = projectNetWorth({
       accounts: [makeAccount()],
       assumptions: { ...defaultAssumptions, lifeExpectancy: 31 },

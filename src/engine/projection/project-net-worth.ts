@@ -19,22 +19,13 @@ export interface ProjectionPoint {
 }
 
 /**
- * Get expected annual return rate for an account based on its asset allocation
+ * Get expected annual return rate for an account
  */
-function getAccountReturnRate(
-  account: Account,
-  assumptions: ScenarioAssumptions
-): Decimal {
+function getAccountReturnRate(account: Account): Decimal {
   if (isDebtType(account.type)) {
     return new Decimal(account.interestRate || '0').div(100).neg()
   }
-
-  const alloc = account.assetAllocation
-  const weightedReturn = new Decimal(alloc.stocks).div(100).times(assumptions.stockReturn)
-    .plus(new Decimal(alloc.bonds).div(100).times(assumptions.bondReturn))
-    .plus(new Decimal(alloc.cash).div(100).times(assumptions.cashReturn))
-
-  return weightedReturn
+  return new Decimal(account.expectedReturnRate || '0').div(100)
 }
 
 /**
@@ -68,7 +59,7 @@ export function projectNetWorth(input: ProjectionInput): ProjectionPoint[] {
 
     for (const account of accounts) {
       const balance = balances[account.id]
-      const returnRate = getAccountReturnRate(account, assumptions)
+      const returnRate = getAccountReturnRate(account)
 
       // Grow the account
       const growth = balance.times(returnRate)
