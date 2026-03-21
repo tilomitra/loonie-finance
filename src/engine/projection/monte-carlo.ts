@@ -98,6 +98,27 @@ export function tDistRandom(rng: () => number, df: number, mean: number, stdDev:
   return mean + (t / tStdDev) * stdDev
 }
 
+export function correlatedReturns(
+  rng: () => number,
+  regime: RegimeParams,
+  df: number
+): { stockReturn: number; bondReturn: number; cashReturn: number } {
+  const z1 = tDistRandom(rng, df, 0, 1)
+  const z2 = tDistRandom(rng, df, 0, 1)
+
+  const rho = regime.correlation
+  const choleskyFactor = Math.sqrt(1 - rho * rho)
+
+  const stockZ = z1
+  const bondZ = rho * z1 + choleskyFactor * z2
+
+  const stockReturn = regime.stockMean + stockZ * regime.stockVol
+  const bondReturn = regime.bondMean + bondZ * regime.bondVol
+  const cashReturn = tDistRandom(rng, df, regime.cashMean, regime.cashVol)
+
+  return { stockReturn, bondReturn, cashReturn }
+}
+
 // Standard deviations for asset classes (annual)
 const ASSET_STD_DEVS = {
   stocks: 0.16,
