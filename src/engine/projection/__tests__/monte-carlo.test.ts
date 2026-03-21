@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { runMonteCarloSimulation, sampleRegime } from '../monte-carlo'
+import { runMonteCarloSimulation, sampleRegime, tDistRandom } from '../monte-carlo'
 import type { Account, ScenarioAssumptions } from '@/types'
 
 function createTestRng(seed: number) {
@@ -151,5 +151,37 @@ describe('sampleRegime', () => {
     expect(counts.bear / n).toBeCloseTo(0.50, 1)
     expect(counts.normal / n).toBeCloseTo(0.40, 1)
     expect(counts.bull / n).toBeCloseTo(0.10, 1)
+  })
+})
+
+describe('tDistRandom', () => {
+  it('should produce heavier tails than normal distribution (kurtosis > 3)', () => {
+    const rng = createTestRng(123)
+    const n = 50000
+    const samples: number[] = []
+
+    for (let i = 0; i < n; i++) {
+      samples.push(tDistRandom(rng, 5, 0, 1))
+    }
+
+    const mean = samples.reduce((a, b) => a + b, 0) / n
+    const variance = samples.reduce((a, b) => a + (b - mean) ** 2, 0) / n
+    const fourthMoment = samples.reduce((a, b) => a + (b - mean) ** 4, 0) / n
+    const kurtosis = fourthMoment / (variance ** 2)
+
+    expect(kurtosis).toBeGreaterThan(4)
+  })
+
+  it('should center around the specified mean', () => {
+    const rng = createTestRng(456)
+    const n = 50000
+    const samples: number[] = []
+
+    for (let i = 0; i < n; i++) {
+      samples.push(tDistRandom(rng, 5, 0.07, 0.16))
+    }
+
+    const mean = samples.reduce((a, b) => a + b, 0) / n
+    expect(mean).toBeCloseTo(0.07, 1)
   })
 })
