@@ -26,6 +26,17 @@ const TRANSITIONS: Record<Regime, Record<Regime, number>> = {
   bear:   { bull: 0.10, normal: 0.40, bear: 0.50 },
 }
 
+export function sampleRegime(current: Regime, rng: () => number): Regime {
+  const probs = TRANSITIONS[current]
+  const r = rng()
+  let cumulative = 0
+  for (const [regime, prob] of Object.entries(probs) as [Regime, number][]) {
+    cumulative += prob
+    if (r < cumulative) return regime
+  }
+  return 'normal'
+}
+
 export interface MonteCarloInput {
   accounts: Account[]
   assumptions: ScenarioAssumptions
@@ -71,6 +82,20 @@ function normalRandom(rng: () => number, mean: number, stdDev: number): number {
   const u2 = rng()
   const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
   return z * stdDev + mean
+}
+
+export function tDistRandom(rng: () => number, df: number, mean: number, stdDev: number): number {
+  const z = normalRandom(rng, 0, 1)
+
+  let chiSq = 0
+  for (let i = 0; i < df; i++) {
+    const n = normalRandom(rng, 0, 1)
+    chiSq += n * n
+  }
+
+  const t = z / Math.sqrt(chiSq / df)
+  const tStdDev = Math.sqrt(df / (df - 2))
+  return mean + (t / tStdDev) * stdDev
 }
 
 // Standard deviations for asset classes (annual)

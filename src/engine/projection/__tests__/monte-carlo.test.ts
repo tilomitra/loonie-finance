@@ -1,6 +1,16 @@
 import { describe, it, expect } from 'vitest'
-import { runMonteCarloSimulation } from '../monte-carlo'
+import { runMonteCarloSimulation, sampleRegime } from '../monte-carlo'
 import type { Account, ScenarioAssumptions } from '@/types'
+
+function createTestRng(seed: number) {
+  let s = seed | 0
+  return () => {
+    s = (s + 0x6d2b79f5) | 0
+    let t = Math.imul(s ^ (s >>> 15), 1 | s)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
 
 const makeAccount = (overrides: Partial<Account> = {}): Account => ({
   id: 'test-1',
@@ -125,5 +135,21 @@ describe('Monte Carlo Simulation', () => {
 
     expect(result.percentiles.p50).toHaveLength(0)
     expect(result.successRate).toBe(1)
+  })
+})
+
+describe('sampleRegime', () => {
+  it('should transition from bear with correct approximate probabilities', () => {
+    const rng = createTestRng(42)
+    const counts = { bull: 0, normal: 0, bear: 0 }
+    const n = 10000
+
+    for (let i = 0; i < n; i++) {
+      counts[sampleRegime('bear', rng)]++
+    }
+
+    expect(counts.bear / n).toBeCloseTo(0.50, 1)
+    expect(counts.normal / n).toBeCloseTo(0.40, 1)
+    expect(counts.bull / n).toBeCloseTo(0.10, 1)
   })
 })
