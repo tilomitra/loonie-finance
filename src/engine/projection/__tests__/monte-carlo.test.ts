@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { runMonteCarloSimulation, sampleRegime, tDistRandom, correlatedReturns } from '../monte-carlo'
-import type { RegimeParams } from '../monte-carlo'
+import { runMonteCarloSimulation, sampleRegime, tDistRandom } from '../monte-carlo'
 import type { Account, ScenarioAssumptions } from '@/types'
 
 function createTestRng(seed: number) {
@@ -20,7 +19,7 @@ const makeAccount = (overrides: Partial<Account> = {}): Account => ({
   balance: '100000',
   currency: 'CAD',
   institution: '',
-  assetAllocation: { stocks: 60, bonds: 30, cash: 10, other: 0 },
+  expectedReturnRate: '7.0',
   contributionRoom: null,
   interestRate: null,
   notes: '',
@@ -31,9 +30,6 @@ const makeAccount = (overrides: Partial<Account> = {}): Account => ({
 
 const defaultAssumptions: ScenarioAssumptions = {
   inflationRate: '0.02',
-  stockReturn: '0.07',
-  bondReturn: '0.035',
-  cashReturn: '0.02',
   salaryGrowthRate: '0.03',
   retirementAge: 65,
   lifeExpectancy: 40,
@@ -153,7 +149,7 @@ describe('Monte Carlo Simulation', () => {
 
     // Regime model with fat tails and volatility clustering should produce
     // a wider spread than a naive i.i.d. normal model
-    expect(spread).toBeGreaterThan(180000)
+    expect(spread).toBeGreaterThan(100000)
   })
 })
 
@@ -205,39 +201,3 @@ describe('tDistRandom', () => {
   })
 })
 
-describe('correlatedReturns', () => {
-  it('should produce negatively correlated stock/bond returns in bear regime', () => {
-    const rng = createTestRng(789)
-    const bearRegime: RegimeParams = {
-      stockMean: -0.15, stockVol: 0.25,
-      bondMean: 0.05, bondVol: 0.08,
-      cashMean: 0.015, cashVol: 0.01,
-      correlation: -0.3,
-    }
-
-    const n = 10000
-    const stockReturns: number[] = []
-    const bondReturns: number[] = []
-
-    for (let i = 0; i < n; i++) {
-      const r = correlatedReturns(rng, bearRegime, 5)
-      stockReturns.push(r.stockReturn)
-      bondReturns.push(r.bondReturn)
-    }
-
-    const stockMean = stockReturns.reduce((a, b) => a + b, 0) / n
-    const bondMean = bondReturns.reduce((a, b) => a + b, 0) / n
-    let cov = 0, stockVar = 0, bondVar = 0
-    for (let i = 0; i < n; i++) {
-      const ds = stockReturns[i] - stockMean
-      const db = bondReturns[i] - bondMean
-      cov += ds * db
-      stockVar += ds * ds
-      bondVar += db * db
-    }
-    const correlation = cov / Math.sqrt(stockVar * bondVar)
-
-    expect(correlation).toBeLessThan(0)
-    expect(correlation).toBeGreaterThan(-0.6)
-  })
-})

@@ -1,22 +1,14 @@
-import type { Account, ScenarioAssumptions } from '@/types'
+import type { Account, ScenarioAssumptions, AccountType } from '@/types'
 import { isDebtType } from '@/types'
+import { DEFAULT_VOLATILITIES } from './account-defaults'
 
 export type Regime = 'bull' | 'normal' | 'bear'
 
-export interface RegimeParams {
-  stockMean: number
-  stockVol: number
-  bondMean: number
-  bondVol: number
-  cashMean: number
-  cashVol: number
-  correlation: number
-}
-
-const REGIME_PARAMS: Record<Regime, RegimeParams> = {
-  bull:   { stockMean: 0.12, stockVol: 0.12, bondMean: 0.04,  bondVol: 0.05, cashMean: 0.025, cashVol: 0.01, correlation:  0.2 },
-  normal: { stockMean: 0.07, stockVol: 0.16, bondMean: 0.035, bondVol: 0.06, cashMean: 0.02,  cashVol: 0.01, correlation:  0.0 },
-  bear:   { stockMean:-0.15, stockVol: 0.25, bondMean: 0.05,  bondVol: 0.08, cashMean: 0.015, cashVol: 0.01, correlation: -0.3 },
+/** Regime multipliers applied to per-account mean and volatility */
+const REGIME_MULTIPLIERS: Record<Regime, { meanMul: number; volMul: number }> = {
+  bull:   { meanMul: 1.5, volMul: 0.8 },
+  normal: { meanMul: 1.0, volMul: 1.0 },
+  bear:   { meanMul: -0.5, volMul: 1.5 },
 }
 
 // Transition matrix: TRANSITIONS[from][to] = probability
@@ -98,27 +90,6 @@ export function tDistRandom(rng: () => number, df: number, mean: number, stdDev:
   return mean + (t / tStdDev) * stdDev
 }
 
-export function correlatedReturns(
-  rng: () => number,
-  regime: RegimeParams,
-  df: number
-): { stockReturn: number; bondReturn: number; cashReturn: number } {
-  const z1 = tDistRandom(rng, df, 0, 1)
-  const z2 = tDistRandom(rng, df, 0, 1)
-
-  const rho = regime.correlation
-  const choleskyFactor = Math.sqrt(1 - rho * rho)
-
-  const stockZ = z1
-  const bondZ = rho * z1 + choleskyFactor * z2
-
-  const stockReturn = regime.stockMean + stockZ * regime.stockVol
-  const bondReturn = regime.bondMean + bondZ * regime.bondVol
-  const cashReturn = tDistRandom(rng, df, regime.cashMean, regime.cashVol)
-
-  return { stockReturn, bondReturn, cashReturn }
-}
-
 export function runMonteCarloSimulation(input: MonteCarloInput): MonteCarloResult {
   const { accounts, assumptions, currentAge, startYear, iterations, seed = 42 } = input
   const yearsToProject = assumptions.lifeExpectancy - currentAge
@@ -142,18 +113,15 @@ export function runMonteCarloSimulation(input: MonteCarloInput): MonteCarloResul
   }
 
   // Pre-compute account parameters
-  const accountParams = accounts.map(a => {
-    const alloc = a.assetAllocation
-    return {
-      id: a.id,
-      isDebt: isDebtType(a.type),
-      initialBalance: parseFloat(a.balance || '0'),
-      debtRate: isDebtType(a.type) ? parseFloat(a.interestRate || '0') / 100 : 0,
-      stockW: alloc.stocks / 100,
-      bondW: alloc.bonds / 100,
-      cashW: alloc.cash / 100,
-    }
-  })
+  const accountParams = accounts.map(a => ({
+    id: a.id,
+    type: a.type as AccountType,
+    isDebt: isDebtType(a.type),
+    initialBalance: parseFloat(a.balance || '0'),
+    debtRate: isDebtType(a.type) ? parseFloat(a.interestRate || '0') / 100 : 0,
+    expectedReturn: isDebtType(a.type) ? 0 : parseFloat(a.expectedReturnRate || '0') / 100,
+    volatility: DEFAULT_VOLATILITIES[a.type as AccountType] ?? 0.12,
+  }))
 
   // Store all simulation results: [iteration][yearOffset] = netWorth
   const allResults: number[][] = []
@@ -179,17 +147,21 @@ export function runMonteCarloSimulation(input: MonteCarloInput): MonteCarloResul
 
     for (let year = 1; year <= yearsToProject; year++) {
       regime = sampleRegime(regime, rng)
-      const regimeParams = REGIME_PARAMS[regime]
-      const returns = correlatedReturns(rng, regimeParams, T_DF)
+      const regimeMul = REGIME_MULTIPLIERS[regime]
+
+      // Draw a shared market factor for this year (correlates accounts)
+      const marketFactor = tDistRandom(rng, T_DF, 0, 1)
 
       for (const param of accountParams) {
         if (param.isDebt) {
           balances[param.id] *= (1 + param.debtRate)
         } else {
-          const accountReturn =
-            param.stockW * returns.stockReturn +
-            param.bondW * returns.bondReturn +
-            param.cashW * returns.cashReturn
+          // Apply regime multiplier to the expected return
+          const regimeMean = param.expectedReturn * regimeMul.meanMul
+          const regimeVol = param.volatility * regimeMul.volMul
+
+          // Use shared market factor scaled by per-account volatility
+          const accountReturn = regimeMean + marketFactor * regimeVol
 
           balances[param.id] *= (1 + accountReturn)
         }
