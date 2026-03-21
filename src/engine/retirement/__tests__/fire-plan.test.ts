@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import Decimal from 'decimal.js'
 import { calculateIncomeTimeline, calculateEffectiveFireNumber } from '../fire-plan'
-import { calculateFirePlan, calculateRrspComparison, type FirePlanInputs } from '../fire-plan'
+import { calculateFirePlan, calculateRrspComparison, calculateBenefitRecommendation, type FirePlanInputs } from '../fire-plan'
 
 describe('calculateIncomeTimeline', () => {
   const baseInputs = {
@@ -282,5 +282,61 @@ describe('calculateRrspComparison', () => {
       rrspBalance: new Decimal('800000'),
     })
     expect(typeof result.oasClawbackWarning).toBe('boolean')
+  })
+})
+
+describe('calculateBenefitRecommendation', () => {
+  const inputs: FirePlanInputs = {
+    currentAge: 35,
+    targetFireAge: 50,
+    lifeExpectancy: 90,
+    currentNetWorth: new Decimal('500000'),
+    annualSavings: new Decimal('40000'),
+    currentAnnualExpenses: new Decimal('50000'),
+    postFireAnnualSpending: new Decimal('45000'),
+    leanExpenses: new Decimal('30000'),
+    fatExpenses: new Decimal('70000'),
+    postFireAnnualIncome: new Decimal('10000'),
+    hasSpouse: false,
+    spouseAnnualIncome: new Decimal('0'),
+    spousePortfolio: new Decimal('0'),
+    cppStartAge: 65,
+    oasStartAge: 65,
+    rrspWithdrawalStartAge: 65,
+    rrspBalance: new Decimal('100000'),
+    withdrawalRate: new Decimal('0.04'),
+    inflationRate: new Decimal('0.02'),
+    expectedReturnRate: new Decimal('0.05'),
+    yearsContributedCPP: 25,
+    province: 'ON',
+  }
+
+  it('should recommend CPP age between 60 and 70', () => {
+    const result = calculateBenefitRecommendation(inputs)
+    expect(result.recommendedCppAge).toBeGreaterThanOrEqual(60)
+    expect(result.recommendedCppAge).toBeLessThanOrEqual(70)
+  })
+
+  it('should recommend OAS age between 65 and 70', () => {
+    const result = calculateBenefitRecommendation(inputs)
+    expect(result.recommendedOasAge).toBeGreaterThanOrEqual(65)
+    expect(result.recommendedOasAge).toBeLessThanOrEqual(70)
+  })
+
+  it('should provide a break-even age', () => {
+    const result = calculateBenefitRecommendation(inputs)
+    expect(result.cppBreakEvenAge).toBeGreaterThan(65)
+    expect(result.cppBreakEvenAge).toBeLessThan(100)
+  })
+
+  it('should provide monthly amounts at 65 and recommended age', () => {
+    const result = calculateBenefitRecommendation(inputs)
+    expect(result.monthlyAt65.toNumber()).toBeGreaterThan(0)
+    expect(result.monthlyAtRecommended.toNumber()).toBeGreaterThan(0)
+  })
+
+  it('should provide reasoning string', () => {
+    const result = calculateBenefitRecommendation(inputs)
+    expect(result.reasoning.length).toBeGreaterThan(0)
   })
 })

@@ -257,11 +257,88 @@ export function calculateRrspComparison(inputs: FirePlanInputs): RrspComparison 
   }
 }
 
-// Stub — replaced in Task 5
 export function calculateBenefitRecommendation(inputs: FirePlanInputs): BenefitRecommendation {
+  const realReturn = inputs.expectedReturnRate.minus(inputs.inflationRate)
+  const monthlyAt65 = estimateCppBenefit(65, inputs.yearsContributedCPP, 0.75).monthlyBenefit
+
+  // Compare present value of lifetime CPP for each start age
+  let bestCppAge = 65
+  let bestCppPV = new Decimal(0)
+
+  for (let startAge = 60; startAge <= 70; startAge++) {
+    const cpp = estimateCppBenefit(startAge, inputs.yearsContributedCPP, 0.75)
+    let pv = new Decimal(0)
+    for (let age = startAge; age < inputs.lifeExpectancy; age++) {
+      const yearsFromNow = age - inputs.currentAge
+      const discountFactor = realReturn.plus(1).pow(-yearsFromNow)
+      pv = pv.plus(cpp.annualBenefit.times(discountFactor))
+    }
+    if (pv.gt(bestCppPV)) {
+      bestCppPV = pv
+      bestCppAge = startAge
+    }
+  }
+
+  // OAS: compare PV of each start age 65-70
+  let bestOasAge = 65
+  let bestOasPV = new Decimal(0)
+
+  for (let startAge = 65; startAge <= 70; startAge++) {
+    const oas = estimateOasBenefit(startAge, inputs.postFireAnnualSpending.toNumber(), 40)
+    let pv = new Decimal(0)
+    for (let age = startAge; age < inputs.lifeExpectancy; age++) {
+      const yearsFromNow = age - inputs.currentAge
+      const discountFactor = realReturn.plus(1).pow(-yearsFromNow)
+      pv = pv.plus(oas.netAnnualBenefit.times(discountFactor))
+    }
+    if (pv.gt(bestOasPV)) {
+      bestOasPV = pv
+      bestOasAge = startAge
+    }
+  }
+
+  // CPP break-even: age where cumulative PV of deferred (70) exceeds cumulative PV of early (60)
+  const earlyCpp = estimateCppBenefit(60, inputs.yearsContributedCPP, 0.75)
+  const lateCpp = estimateCppBenefit(70, inputs.yearsContributedCPP, 0.75)
+  let cumulativePVEarly = new Decimal(0)
+  let cumulativePVLate = new Decimal(0)
+  let breakEvenAge = 95
+
+  for (let age = 60; age < 100; age++) {
+    const discountFactor = realReturn.plus(1).pow(-(age - inputs.currentAge))
+    cumulativePVEarly = cumulativePVEarly.plus(earlyCpp.annualBenefit.times(discountFactor))
+    if (age >= 70) {
+      cumulativePVLate = cumulativePVLate.plus(lateCpp.annualBenefit.times(discountFactor))
+    }
+    if (age >= 70 && cumulativePVLate.gte(cumulativePVEarly)) {
+      breakEvenAge = age
+      break
+    }
+  }
+
+  const monthlyAtRecommended = estimateCppBenefit(bestCppAge, inputs.yearsContributedCPP, 0.75).monthlyBenefit
+
+  // Build reasoning
+  let reasoning: string
+  if (bestCppAge > 65) {
+    reasoning = `With a life expectancy of ${inputs.lifeExpectancy} and a portfolio to bridge the gap, deferring CPP to ${bestCppAge} maximizes lifetime present value. Deferring past 65 increases your monthly benefit by ${((bestCppAge - 65) * 12 * 0.7).toFixed(0)}%.`
+  } else if (bestCppAge < 65) {
+    reasoning = `Starting CPP at ${bestCppAge} provides income sooner, which is valuable given your expected return rate and reduces portfolio drawdown during the early FIRE years.`
+  } else {
+    reasoning = `Starting CPP at 65 provides the best balance between benefit amount and years of collection for your situation.`
+  }
+
+  if (bestOasAge > 65) {
+    reasoning += ` For OAS, deferring to ${bestOasAge} adds a ${((bestOasAge - 65) * 12 * 0.6).toFixed(0)}% bonus.`
+  }
+
   return {
-    recommendedCppAge: 65, recommendedOasAge: 65, reasoning: '',
-    cppBreakEvenAge: 80, monthlyAtRecommended: new Decimal(0), monthlyAt65: new Decimal(0),
+    recommendedCppAge: bestCppAge,
+    recommendedOasAge: bestOasAge,
+    reasoning,
+    cppBreakEvenAge: breakEvenAge,
+    monthlyAtRecommended,
+    monthlyAt65,
   }
 }
 
