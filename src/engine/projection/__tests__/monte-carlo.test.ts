@@ -137,6 +137,24 @@ describe('Monte Carlo Simulation', () => {
     expect(result.percentiles.p50).toHaveLength(0)
     expect(result.successRate).toBe(1)
   })
+
+  it('should produce wider p5-p95 spread than naive i.i.d. model', () => {
+    const result = runMonteCarloSimulation({
+      accounts: [makeAccount()],
+      assumptions: { ...defaultAssumptions, lifeExpectancy: 60 },
+      currentAge: 30,
+      startYear: 2026,
+      iterations: 1000,
+      seed: 42,
+    })
+
+    const lastIdx = result.percentiles.p50.length - 1
+    const spread = result.percentiles.p95[lastIdx].netWorth - result.percentiles.p5[lastIdx].netWorth
+
+    // Regime model with fat tails and volatility clustering should produce
+    // a wider spread than a naive i.i.d. normal model
+    expect(spread).toBeGreaterThan(180000)
+  })
 })
 
 describe('sampleRegime', () => {
