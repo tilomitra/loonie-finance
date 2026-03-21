@@ -21,12 +21,12 @@ describe('buildSystemPrompt', () => {
     const accounts: Account[] = [
       {
         id: '1', name: 'TFSA', type: 'tfsa', balance: '25000', currency: 'CAD',
-        institution: 'WS', assetAllocation: { stocks: 80, bonds: 10, cash: 10, other: 0 },
+        institution: 'WS', expectedReturnRate: '5.0',
         contributionRoom: null, interestRate: null, notes: '', createdAt: 0, updatedAt: 0,
       },
       {
         id: '2', name: 'Mortgage', type: 'debt-mortgage', balance: '300000', currency: 'CAD',
-        institution: 'TD', assetAllocation: { stocks: 0, bonds: 0, cash: 0, other: 0 },
+        institution: 'TD', expectedReturnRate: '0',
         contributionRoom: null, interestRate: '4.8', notes: '', createdAt: 0, updatedAt: 0,
       },
     ]

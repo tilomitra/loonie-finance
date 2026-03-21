@@ -7,13 +7,6 @@ export type AccountType =
 
 export type Currency = 'CAD' | 'USD'
 
-export interface AssetAllocation {
-  stocks: number
-  bonds: number
-  cash: number
-  other: number
-}
-
 export interface Account {
   id: string
   name: string
@@ -21,7 +14,7 @@ export interface Account {
   balance: string // decimal string
   currency: Currency
   institution: string
-  assetAllocation: AssetAllocation
+  expectedReturnRate: string // annual return % as decimal string (e.g., '5.0')
   contributionRoom: string | null
   interestRate: string | null
   notes: string
@@ -44,9 +37,6 @@ export interface MonthlyContribution {
 
 export interface ScenarioAssumptions {
   inflationRate: string
-  stockReturn: string
-  bondReturn: string
-  cashReturn: string
   salaryGrowthRate: string
   retirementAge: number
   lifeExpectancy: number
