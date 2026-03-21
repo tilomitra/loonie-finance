@@ -12,7 +12,7 @@ Users have accounts with very different risk/return profiles (e.g., chequing at 
 
 Add `expectedReturnRate: string` (annual percentage as decimal.js string, e.g., `'5.0'`).
 
-Remove `assetAllocation` — no longer needed since returns are specified directly.
+Remove `assetAllocation` and the `AssetAllocation` interface — no longer needed since returns are specified directly.
 
 ```typescript
 interface Account {
@@ -32,24 +32,33 @@ interface Account {
 }
 ```
 
+Note: Debts keep `interestRate` (cost of borrowing). Asset accounts use `expectedReturnRate` (growth). Different semantics, intentionally separate fields.
+
 ### ScenarioAssumptions Interface
 
 Remove `stockReturn`, `bondReturn`, `cashReturn` — replaced by per-account rates.
 
+Existing saved scenarios in the database will retain these fields as harmless dead data.
+
 ### Smart Defaults by Account Type
 
-| Type | Default Rate |
-|------|-------------|
-| cash | 2.5% |
-| tfsa | 5% |
-| rrsp | 5% |
-| fhsa | 5% |
-| non-registered | 5% |
-| crypto | 8% |
-| property | 3% |
-| pension | 4% |
+| Type | Default Rate | Default Volatility |
+|------|-------------|-------------------|
+| cash | 2.5% | 1% |
+| tfsa | 5% | 12% |
+| rrsp | 5% | 12% |
+| fhsa | 5% | 12% |
+| non-registered | 5% | 12% |
+| crypto | 8% | 50% |
+| property | 3% | 12% |
+| pension | 4% | 8% |
 
 Debt types continue using their existing `interestRate` field.
+
+### Input Validation
+
+- Expected return rate: 0% to 30% (inclusive)
+- 0% means no growth, no variance in Monte Carlo
 
 ## UI Changes
 
@@ -75,38 +84,58 @@ Debt types continue using their existing `interestRate` field.
 ### Monte Carlo Simulation (`monte-carlo.ts`)
 
 - Use `account.expectedReturnRate` as the mean annual return for each account
-- Scale volatility to the rate: higher expected return = higher volatility
-- Suggested volatility mapping: `vol = rate * 2` capped at reasonable bounds (e.g., min 1%, max 25%)
-- Retain regime switching — regimes apply a multiplier/shift to the per-account mean and vol
+- Use type-based volatility lookup (not derived from rate) for realistic risk modeling:
+
+| Type | Volatility |
+|------|-----------|
+| cash | 1% |
+| tfsa, rrsp, fhsa, non-registered | 12% |
+| crypto | 50% |
+| property | 12% |
+| pension | 8% |
+
+- Draw a single market factor per year per regime, then apply per-account vol to generate each account's return. This preserves correlation across accounts (if stocks crash, both TFSA and RRSP decline together).
+- Retain regime switching with Markov transition matrix
 - Retain fat-tailed Student's t-distribution for realistic tail risk
-- Remove Cholesky correlation (was for stock/bond correlation, no longer applicable with single-rate model)
+- Remove Cholesky correlation helper (replaced by shared market factor approach)
 
 ### Regime Integration with Per-Account Rates
 
-Each regime shifts the per-account mean and volatility:
+Regimes apply proportional shifts rather than flat additive shifts, so low-return accounts (cash) are not unrealistically affected:
 
-| Regime | Mean Shift | Vol Multiplier |
-|--------|-----------|----------------|
-| bull   | +3%       | 0.8x           |
-| normal | 0%        | 1.0x           |
-| bear   | -8%       | 1.5x           |
+| Regime | Mean Multiplier | Vol Multiplier |
+|--------|----------------|----------------|
+| bull   | 1.5x           | 0.8x           |
+| normal | 1.0x           | 1.0x           |
+| bear   | -0.5x          | 1.5x           |
 
-Example: Account with 5% expected return in a bear market → mean = -3%, vol = 1.5x base vol.
+Example: Cash at 2.5% in bear market → mean = -1.25%, vol = 1.5%. RRSP at 10% in bear → mean = -5%, vol = 18%.
 
 ## Database Migration
 
-Dexie version upgrade:
-1. Add `expectedReturnRate` to all existing accounts using their type's smart default
-2. Remove `assetAllocation` from all existing accounts
+Dexie version upgrade with `upgrade()` callback:
+
+```typescript
+this.version(N).stores({
+  accounts: 'id, type, createdAt',
+  // ... same indexes
+}).upgrade(tx => {
+  return tx.table('accounts').toCollection().modify(account => {
+    account.expectedReturnRate = DEFAULT_RATES[account.type] ?? '5.0'
+    delete account.assetAllocation
+  })
+})
+```
 
 ## Files to Modify
 
 | File | Change |
 |------|--------|
-| `src/types/index.ts` | Update `Account` and `ScenarioAssumptions` interfaces |
-| `src/db/database.ts` | Add migration, update schema version |
-| `src/pages/Accounts.tsx` | Add return rate input, smart defaults by type |
-| `src/pages/Projections.tsx` | Remove stock/bond/cash return inputs |
-| `src/engine/projection/project-net-worth.ts` | Use per-account rate directly |
-| `src/engine/projection/monte-carlo.ts` | Refactor to single-rate model with regime shifts |
+| `src/types/index.ts` | Update `Account` interface (add `expectedReturnRate`, remove `assetAllocation` and `AssetAllocation` type), update `ScenarioAssumptions` |
+| `src/db/database.ts` | Add migration with `upgrade()` callback, update schema version |
+| `src/pages/Accounts.tsx` | Add return rate input, smart defaults by type, remove `assetAllocation` from create/edit |
+| `src/pages/Projections.tsx` | Remove stock/bond/cash return inputs and defaults |
+| `src/pages/ImportExport.tsx` | Handle legacy imports that have `assetAllocation` / old scenario fields |
+| `src/engine/projection/project-net-worth.ts` | Use per-account rate directly, remove `getAccountReturnRate()` |
+| `src/engine/projection/monte-carlo.ts` | Refactor to single-rate model with type-based vol and shared market factor |
 | `src/engine/projection/__tests__/` | Update tests for new model |
