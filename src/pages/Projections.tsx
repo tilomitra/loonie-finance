@@ -30,9 +30,6 @@ const provinceOptions = [
 
 const DEFAULT_ASSUMPTIONS: ScenarioAssumptions = {
   inflationRate: '0.02',
-  stockReturn: '0.07',
-  bondReturn: '0.035',
-  cashReturn: '0.02',
   salaryGrowthRate: '0.03',
   retirementAge: 65,
   lifeExpectancy: 90,
@@ -181,32 +178,6 @@ export function Projections() {
             <CardDescription>Adjust your projection parameters</CardDescription>
           </CardHeader>
           <div className="space-y-3">
-            <div>
-              <label className="text-[11px] font-medium text-text-secondary uppercase tracking-wide">Stock Return</label>
-              <input
-                type="range"
-                min="0"
-                max="0.15"
-                step="0.005"
-                value={assumptions.stockReturn}
-                onChange={(e) => updateAssumption('stockReturn', e.target.value)}
-                className="w-full mt-1"
-              />
-              <span className="text-[11px] text-text-secondary">{(parseFloat(assumptions.stockReturn) * 100).toFixed(1)}%</span>
-            </div>
-            <div>
-              <label className="text-[11px] font-medium text-text-secondary uppercase tracking-wide">Bond Return</label>
-              <input
-                type="range"
-                min="0"
-                max="0.08"
-                step="0.005"
-                value={assumptions.bondReturn}
-                onChange={(e) => updateAssumption('bondReturn', e.target.value)}
-                className="w-full mt-1"
-              />
-              <span className="text-[11px] text-text-secondary">{(parseFloat(assumptions.bondReturn) * 100).toFixed(1)}%</span>
-            </div>
             <div>
               <label className="text-[11px] font-medium text-text-secondary uppercase tracking-wide">Inflation</label>
               <input
