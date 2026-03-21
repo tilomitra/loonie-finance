@@ -5,6 +5,7 @@ import {
   TrendingUp,
   Flame,
   Calculator,
+  BotMessageSquare,
   Settings,
   ArrowLeftRight,
 } from 'lucide-react'
@@ -17,6 +18,7 @@ const navItems = [
   { to: '/projections', icon: TrendingUp, label: 'Projections' },
   { to: '/fire', icon: Flame, label: 'FIRE' },
   { to: '/tax', icon: Calculator, label: 'Tax' },
+  { to: '/advisor', icon: BotMessageSquare, label: 'AI Advisor' },
   { to: '/settings', icon: Settings, label: 'Settings' },
   { to: '/import-export', icon: ArrowLeftRight, label: 'Import / Export' },
 ]
