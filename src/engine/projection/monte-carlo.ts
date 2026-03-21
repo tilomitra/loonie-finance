@@ -1,6 +1,31 @@
 import type { Account, ScenarioAssumptions } from '@/types'
 import { isDebtType } from '@/types'
 
+export type Regime = 'bull' | 'normal' | 'bear'
+
+export interface RegimeParams {
+  stockMean: number
+  stockVol: number
+  bondMean: number
+  bondVol: number
+  cashMean: number
+  cashVol: number
+  correlation: number
+}
+
+const REGIME_PARAMS: Record<Regime, RegimeParams> = {
+  bull:   { stockMean: 0.12, stockVol: 0.12, bondMean: 0.04,  bondVol: 0.05, cashMean: 0.025, cashVol: 0.01, correlation:  0.2 },
+  normal: { stockMean: 0.07, stockVol: 0.16, bondMean: 0.035, bondVol: 0.06, cashMean: 0.02,  cashVol: 0.01, correlation:  0.0 },
+  bear:   { stockMean:-0.15, stockVol: 0.25, bondMean: 0.05,  bondVol: 0.08, cashMean: 0.015, cashVol: 0.01, correlation: -0.3 },
+}
+
+// Transition matrix: TRANSITIONS[from][to] = probability
+const TRANSITIONS: Record<Regime, Record<Regime, number>> = {
+  bull:   { bull: 0.70, normal: 0.25, bear: 0.05 },
+  normal: { bull: 0.20, normal: 0.65, bear: 0.15 },
+  bear:   { bull: 0.10, normal: 0.40, bear: 0.50 },
+}
+
 export interface MonteCarloInput {
   accounts: Account[]
   assumptions: ScenarioAssumptions
