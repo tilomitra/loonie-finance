@@ -32,7 +32,9 @@ Add a dedicated AI Advisor chat page to Loonie Finance, powered by OpenAI's GPT-
 
 ### No New Dependencies
 
-The OpenAI Chat Completions API is called via `fetch` with streaming (SSE parsing). This avoids adding the `openai` npm package and keeps the bundle small. For markdown rendering in AI responses, use a lightweight approach (either a small library like `marked` or simple HTML rendering of common patterns).
+The OpenAI Responses API (`/v1/responses`) is called via `fetch` with streaming (SSE parsing). This is the endpoint that supports the `web_search_preview` built-in tool. This avoids adding the `openai` npm package and keeps the bundle small. For markdown rendering in AI responses, use `marked` with `DOMPurify` to safely render LLM output.
+
+The API key is stored as a plain string in Dexie's IndexedDB. This is appropriate for a local-first app where all data already lives unencrypted in the browser.
 
 ## Data Flow
 
@@ -50,9 +52,9 @@ useFinancialContext() builds system prompt from Dexie data:
   - Contribution room (TFSA, RRSP, FHSA)
         │
         ▼
-openai.ts sends POST to https://api.openai.com/v1/chat/completions
+openai.ts sends POST to https://api.openai.com/v1/responses
   - model: "gpt-4o"
-  - messages: [system prompt, ...conversation history]
+  - input: [system prompt, ...conversation history]
   - tools: [{ type: "web_search_preview" }]
   - stream: true
   - Authorization: Bearer <key from Dexie>
