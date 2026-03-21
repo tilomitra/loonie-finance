@@ -10,6 +10,7 @@ import { db } from '@/db/database'
 import { formatCurrency, generateId } from '@/lib/utils'
 import { ACCOUNT_TYPE_LABELS, isDebtType, type AccountType, type Currency } from '@/types'
 import { Plus, Trash2, Pencil } from 'lucide-react'
+import { DEFAULT_RETURN_RATES } from '@/engine/projection/account-defaults'
 
 const accountTypeOptions = Object.entries(ACCOUNT_TYPE_LABELS).map(([value, label]) => ({
   value,
@@ -33,12 +34,15 @@ export function Accounts() {
     currency: 'CAD' as Currency,
     institution: '',
     interestRate: '',
+    expectedReturnRate: DEFAULT_RETURN_RATES['tfsa'],
     notes: '',
   })
+  const [returnRateEdited, setReturnRateEdited] = useState(false)
 
   const resetForm = () => {
-    setForm({ name: '', type: 'tfsa', balance: '', currency: 'CAD', institution: '', interestRate: '', notes: '' })
+    setForm({ name: '', type: 'tfsa', balance: '', currency: 'CAD', institution: '', interestRate: '', expectedReturnRate: DEFAULT_RETURN_RATES['tfsa'], notes: '' })
     setEditingId(null)
+    setReturnRateEdited(false)
   }
 
   const openNew = () => {
@@ -56,8 +60,10 @@ export function Accounts() {
       currency: account.currency,
       institution: account.institution,
       interestRate: account.interestRate || '',
+      expectedReturnRate: account.expectedReturnRate || DEFAULT_RETURN_RATES[account.type],
       notes: account.notes,
     })
+    setReturnRateEdited(true)
     setEditingId(id)
     setDialogOpen(true)
   }
@@ -72,6 +78,7 @@ export function Accounts() {
         currency: form.currency,
         institution: form.institution,
         interestRate: isDebtType(form.type) ? form.interestRate || null : null,
+        expectedReturnRate: isDebtType(form.type) ? '0' : form.expectedReturnRate,
         notes: form.notes,
         updatedAt: now,
       })
@@ -84,7 +91,7 @@ export function Accounts() {
         balance: form.balance || '0',
         currency: form.currency,
         institution: form.institution,
-        assetAllocation: { stocks: 60, bonds: 30, cash: 10, other: 0 },
+        expectedReturnRate: isDebtType(form.type) ? '0' : form.expectedReturnRate,
         contributionRoom: null,
         interestRate: isDebtType(form.type) ? form.interestRate || null : null,
         notes: form.notes,
@@ -153,6 +160,7 @@ export function Accounts() {
                       <div className="text-[11px] text-text-secondary mt-0.5">
                         {ACCOUNT_TYPE_LABELS[account.type]}
                         {account.institution && ` · ${account.institution}`}
+                        {account.expectedReturnRate && ` · ${account.expectedReturnRate}% return`}
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -234,7 +242,14 @@ export function Accounts() {
           <Select
             label="Account Type"
             value={form.type}
-            onChange={(e) => setForm(f => ({ ...f, type: e.target.value as AccountType }))}
+            onChange={(e) => {
+              const newType = e.target.value as AccountType
+              setForm(f => ({
+                ...f,
+                type: newType,
+                ...(!returnRateEdited ? { expectedReturnRate: DEFAULT_RETURN_RATES[newType] } : {}),
+              }))
+            }}
             options={accountTypeOptions}
           />
           <div className="grid grid-cols-2 gap-4">
@@ -267,6 +282,21 @@ export function Accounts() {
               value={form.interestRate}
               onChange={(e) => setForm(f => ({ ...f, interestRate: e.target.value }))}
               placeholder="e.g., 5.25"
+            />
+          )}
+          {!isDebtType(form.type) && (
+            <Input
+              label="Expected Annual Return (%)"
+              type="number"
+              step="0.1"
+              min="0"
+              max="30"
+              value={form.expectedReturnRate}
+              onChange={(e) => {
+                setForm(f => ({ ...f, expectedReturnRate: e.target.value }))
+                setReturnRateEdited(true)
+              }}
+              placeholder="e.g., 5.0"
             />
           )}
           <Input
