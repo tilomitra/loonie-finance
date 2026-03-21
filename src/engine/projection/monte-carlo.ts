@@ -119,41 +119,6 @@ export function correlatedReturns(
   return { stockReturn, bondReturn, cashReturn }
 }
 
-// Standard deviations for asset classes (annual)
-const ASSET_STD_DEVS = {
-  stocks: 0.16,
-  bonds: 0.06,
-  cash: 0.01,
-}
-
-function getAccountReturnParams(
-  account: Account,
-  assumptions: ScenarioAssumptions
-): { mean: number; stdDev: number } {
-  if (isDebtType(account.type)) {
-    const rate = parseFloat(account.interestRate || '0') / 100
-    return { mean: -rate, stdDev: 0 }
-  }
-
-  const alloc = account.assetAllocation
-  const stockW = alloc.stocks / 100
-  const bondW = alloc.bonds / 100
-  const cashW = alloc.cash / 100
-
-  const mean =
-    stockW * parseFloat(assumptions.stockReturn) +
-    bondW * parseFloat(assumptions.bondReturn) +
-    cashW * parseFloat(assumptions.cashReturn)
-
-  // Portfolio std dev (simplified - assumes no correlation)
-  const variance =
-    stockW ** 2 * ASSET_STD_DEVS.stocks ** 2 +
-    bondW ** 2 * ASSET_STD_DEVS.bonds ** 2 +
-    cashW ** 2 * ASSET_STD_DEVS.cash ** 2
-
-  return { mean, stdDev: Math.sqrt(variance) }
-}
-
 export function runMonteCarloSimulation(input: MonteCarloInput): MonteCarloResult {
   const { accounts, assumptions, currentAge, startYear, iterations, seed = 42 } = input
   const yearsToProject = assumptions.lifeExpectancy - currentAge
@@ -168,6 +133,7 @@ export function runMonteCarloSimulation(input: MonteCarloInput): MonteCarloResul
   }
 
   const rng = createRng(seed)
+  const T_DF = 5
 
   // Build contribution map
   const contributionMap: Record<string, number> = {}
@@ -175,13 +141,19 @@ export function runMonteCarloSimulation(input: MonteCarloInput): MonteCarloResul
     contributionMap[contrib.accountId] = parseFloat(contrib.amount) * 12
   }
 
-  // Get return parameters for each account
-  const returnParams = accounts.map(a => ({
-    id: a.id,
-    ...getAccountReturnParams(a, assumptions),
-    isDebt: isDebtType(a.type),
-    initialBalance: parseFloat(a.balance || '0'),
-  }))
+  // Pre-compute account parameters
+  const accountParams = accounts.map(a => {
+    const alloc = a.assetAllocation
+    return {
+      id: a.id,
+      isDebt: isDebtType(a.type),
+      initialBalance: parseFloat(a.balance || '0'),
+      debtRate: isDebtType(a.type) ? parseFloat(a.interestRate || '0') / 100 : 0,
+      stockW: alloc.stocks / 100,
+      bondW: alloc.bonds / 100,
+      cashW: alloc.cash / 100,
+    }
+  })
 
   // Store all simulation results: [iteration][yearOffset] = netWorth
   const allResults: number[][] = []
@@ -189,7 +161,7 @@ export function runMonteCarloSimulation(input: MonteCarloInput): MonteCarloResul
 
   for (let iter = 0; iter < iterations; iter++) {
     const balances: Record<string, number> = {}
-    for (const param of returnParams) {
+    for (const param of accountParams) {
       balances[param.id] = param.initialBalance
     }
 
@@ -197,17 +169,30 @@ export function runMonteCarloSimulation(input: MonteCarloInput): MonteCarloResul
 
     // Record starting net worth
     let netWorth = 0
-    for (const param of returnParams) {
+    for (const param of accountParams) {
       netWorth += param.isDebt ? -balances[param.id] : balances[param.id]
     }
     yearlyNetWorth.push(netWorth)
 
     let neverNegative = true
+    let regime: Regime = 'normal'
 
     for (let year = 1; year <= yearsToProject; year++) {
-      for (const param of returnParams) {
-        const annualReturn = normalRandom(rng, param.mean, param.stdDev)
-        balances[param.id] *= (1 + annualReturn)
+      regime = sampleRegime(regime, rng)
+      const regimeParams = REGIME_PARAMS[regime]
+      const returns = correlatedReturns(rng, regimeParams, T_DF)
+
+      for (const param of accountParams) {
+        if (param.isDebt) {
+          balances[param.id] *= (1 + param.debtRate)
+        } else {
+          const accountReturn =
+            param.stockW * returns.stockReturn +
+            param.bondW * returns.bondReturn +
+            param.cashW * returns.cashReturn
+
+          balances[param.id] *= (1 + accountReturn)
+        }
 
         // Add contributions
         const contrib = contributionMap[param.id] || 0
@@ -226,7 +211,7 @@ export function runMonteCarloSimulation(input: MonteCarloInput): MonteCarloResul
       }
 
       netWorth = 0
-      for (const param of returnParams) {
+      for (const param of accountParams) {
         netWorth += param.isDebt ? -balances[param.id] : balances[param.id]
       }
       yearlyNetWorth.push(netWorth)
