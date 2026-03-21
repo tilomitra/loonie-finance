@@ -74,3 +74,51 @@ export function calculateIncomeTimeline(inputs: IncomeTimelineInputs): TimelineY
 
   return timeline
 }
+
+/**
+ * Calculate the initial portfolio at FIRE age needed to sustain withdrawals
+ * through retirement without depletion. Uses binary search over the timeline.
+ *
+ * Works in real (inflation-adjusted) terms:
+ * - realReturn = expectedReturnRate - inflationRate
+ * - All spending and income in today's dollars
+ */
+export function calculateEffectiveFireNumber(inputs: IncomeTimelineInputs): Decimal {
+  const timeline = calculateIncomeTimeline(inputs)
+  const realReturn = inputs.expectedReturnRate.minus(inputs.inflationRate)
+
+  // If no withdrawals needed at all
+  if (timeline.every(y => y.portfolioWithdrawal.lte(0))) {
+    return new Decimal(0)
+  }
+
+  // Binary search for the minimum starting portfolio
+  // Upper bound: total spending * 3 handles negative real returns safely
+  let lo = new Decimal(0)
+  let hi = inputs.postFireAnnualSpending.times(inputs.lifeExpectancy - inputs.fireAge).times(3)
+
+  for (let i = 0; i < 100; i++) {
+    const mid = lo.plus(hi).div(2)
+    if (portfolioSurvives(mid, timeline, realReturn)) {
+      hi = mid
+    } else {
+      lo = mid
+    }
+    if (hi.minus(lo).lt(100)) break // within $100
+  }
+
+  return hi.toDecimalPlaces(0)
+}
+
+function portfolioSurvives(
+  startingPortfolio: Decimal,
+  timeline: TimelineYear[],
+  realReturn: Decimal
+): boolean {
+  let portfolio = startingPortfolio
+  for (const year of timeline) {
+    portfolio = portfolio.times(realReturn.plus(1)).minus(year.portfolioWithdrawal)
+    if (portfolio.lt(0)) return false
+  }
+  return true
+}

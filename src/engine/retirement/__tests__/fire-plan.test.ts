@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import Decimal from 'decimal.js'
-import { calculateIncomeTimeline } from '../fire-plan'
+import { calculateIncomeTimeline, calculateEffectiveFireNumber } from '../fire-plan'
 
 describe('calculateIncomeTimeline', () => {
   const baseInputs = {
@@ -62,5 +62,58 @@ describe('calculateIncomeTimeline', () => {
     const before = timeline.find(t => t.age === 60)!
     const after = timeline.find(t => t.age === 66)!
     expect(after.portfolioWithdrawal.toNumber()).toBeLessThan(before.portfolioWithdrawal.toNumber())
+  })
+})
+
+describe('calculateEffectiveFireNumber', () => {
+  const baseInputs = {
+    fireAge: 45,
+    lifeExpectancy: 90,
+    postFireAnnualSpending: new Decimal('50000'),
+    postFireAnnualIncome: new Decimal('0'),
+    spouseAnnualIncome: new Decimal('0'),
+    cppStartAge: 65,
+    oasStartAge: 65,
+    yearsContributedCPP: 20,
+    inflationRate: new Decimal('0.02'),
+    expectedReturnRate: new Decimal('0.05'),
+  }
+
+  it('should return a positive FIRE number for typical inputs', () => {
+    const result = calculateEffectiveFireNumber(baseInputs)
+    expect(result.toNumber()).toBeGreaterThan(0)
+  })
+
+  it('should return a lower number when post-FIRE income covers some spending', () => {
+    const withoutIncome = calculateEffectiveFireNumber(baseInputs)
+    const withIncome = calculateEffectiveFireNumber({
+      ...baseInputs,
+      postFireAnnualIncome: new Decimal('20000'),
+    })
+    expect(withIncome.toNumber()).toBeLessThan(withoutIncome.toNumber())
+  })
+
+  it('should return zero when income covers all spending', () => {
+    const result = calculateEffectiveFireNumber({
+      ...baseInputs,
+      postFireAnnualIncome: new Decimal('50000'),
+    })
+    expect(result.toNumber()).toBe(0)
+  })
+
+  it('should return a lower number with earlier CPP start', () => {
+    const cpp65 = calculateEffectiveFireNumber({ ...baseInputs, cppStartAge: 65 })
+    const cpp60 = calculateEffectiveFireNumber({ ...baseInputs, cppStartAge: 60 })
+    expect(cpp65.toNumber()).toBeGreaterThan(0)
+    expect(cpp60.toNumber()).toBeGreaterThan(0)
+  })
+
+  it('should return a lower number with spouse income', () => {
+    const solo = calculateEffectiveFireNumber(baseInputs)
+    const withSpouse = calculateEffectiveFireNumber({
+      ...baseInputs,
+      spouseAnnualIncome: new Decimal('30000'),
+    })
+    expect(withSpouse.toNumber()).toBeLessThan(solo.toNumber())
   })
 })
