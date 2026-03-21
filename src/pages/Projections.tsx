@@ -8,8 +8,9 @@ import { db } from '@/db/database'
 import { formatCurrency, generateId } from '@/lib/utils'
 import { projectNetWorth } from '@/engine/projection/project-net-worth'
 import type { ScenarioAssumptions, Province } from '@/types'
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Line } from 'recharts'
 import { Plus, TrendingUp } from 'lucide-react'
+import { runMonteCarloSimulation, type MonteCarloResult } from '@/engine/projection/monte-carlo'
 
 const provinceOptions = [
   { value: 'AB', label: 'Alberta' },
@@ -51,6 +52,9 @@ export function Projections() {
 
   const [assumptions, setAssumptions] = useState<ScenarioAssumptions>(DEFAULT_ASSUMPTIONS)
   const [scenarioName, setScenarioName] = useState('Base Scenario')
+  const [mcIterations, setMcIterations] = useState(1000)
+  const [mcResult, setMcResult] = useState<MonteCarloResult | null>(null)
+  const [mcRunning, setMcRunning] = useState(false)
 
   const currentAge = useMemo(() => {
     if (!profile?.dateOfBirth) return 30
@@ -95,6 +99,45 @@ export function Projections() {
   ) => {
     setAssumptions(prev => ({ ...prev, [key]: value }))
   }
+
+  const handleRunMonteCarlo = () => {
+    setMcRunning(true)
+    setTimeout(() => {
+      const result = runMonteCarloSimulation({
+        accounts,
+        assumptions,
+        currentAge,
+        startYear: new Date().getFullYear(),
+        iterations: mcIterations,
+      })
+      setMcResult(result)
+      setMcRunning(false)
+    }, 10)
+  }
+
+  const mcChartData = useMemo(() => {
+    if (!mcResult) return []
+
+    return mcResult.percentiles.p5.map((point, i) => {
+      const p5 = mcResult.percentiles.p5[i].netWorth
+      const p25 = mcResult.percentiles.p25[i].netWorth
+      const p75 = mcResult.percentiles.p75[i].netWorth
+      const p95 = mcResult.percentiles.p95[i].netWorth
+      const p50 = mcResult.percentiles.p50[i].netWorth
+
+      const detPoint = projectionData.find(d => d.age === point.age)
+
+      return {
+        age: point.age,
+        p5,
+        band_lower: p25 - p5,
+        band_middle: p75 - p25,
+        band_upper: p95 - p75,
+        median: p50,
+        deterministic: detPoint?.netWorth ?? null,
+      }
+    })
+  }, [mcResult, projectionData])
 
   if (accounts.length === 0) {
     return (
@@ -259,6 +302,158 @@ export function Projections() {
                 </AreaChart>
               </ResponsiveContainer>
             </div>
+          </Card>
+
+          {/* Monte Carlo Simulation */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Monte Carlo Simulation</CardTitle>
+              <CardDescription>Regime-aware projection with confidence bands</CardDescription>
+            </CardHeader>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex gap-1">
+                {[500, 1000, 5000].map((n) => (
+                  <Button
+                    key={n}
+                    variant={mcIterations === n ? 'primary' : 'secondary'}
+                    size="sm"
+                    onClick={() => { setMcIterations(n); setMcResult(null) }}
+                  >
+                    {n.toLocaleString()}
+                  </Button>
+                ))}
+              </div>
+              <Button onClick={handleRunMonteCarlo} disabled={mcRunning} size="sm">
+                {mcRunning ? 'Running...' : 'Run Simulation'}
+              </Button>
+            </div>
+
+            {mcChartData.length > 0 && (
+              <>
+                <div className="h-96">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={mcChartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E8E8E4" />
+                      <XAxis
+                        dataKey="age"
+                        tick={{ fontSize: 11, fill: '#878787' }}
+                        label={{ value: 'Age', position: 'insideBottom', offset: -5, style: { fontSize: 11, fill: '#878787' } }}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 11, fill: '#878787' }}
+                        tickFormatter={(v) => `$${(v / 1000).toFixed(0)}K`}
+                      />
+                      <Tooltip
+                        formatter={(v, name) => {
+                          const labels: Record<string, string> = {
+                            median: 'Median (p50)',
+                            deterministic: 'Deterministic',
+                          }
+                          const num = typeof v === 'number' ? v : 0
+                          const nameStr = String(name ?? '')
+                          return [formatCurrency(String(Math.round(num))), labels[nameStr] || nameStr]
+                        }}
+                        labelFormatter={(age) => `Age ${age}`}
+                        contentStyle={{ borderRadius: '8px', border: '1px solid #E8E8E4', fontSize: '13px', boxShadow: 'none' }}
+                      />
+
+                      {/* Invisible base at p5 */}
+                      <Area
+                        type="monotone"
+                        dataKey="p5"
+                        stackId="mc"
+                        fill="transparent"
+                        stroke="none"
+                      />
+                      {/* Lower band: p5 to p25 */}
+                      <Area
+                        type="monotone"
+                        dataKey="band_lower"
+                        stackId="mc"
+                        fill="#2D5A27"
+                        fillOpacity={0.08}
+                        stroke="none"
+                        name="5th-25th percentile"
+                      />
+                      {/* Middle band: p25 to p75 */}
+                      <Area
+                        type="monotone"
+                        dataKey="band_middle"
+                        stackId="mc"
+                        fill="#2D5A27"
+                        fillOpacity={0.15}
+                        stroke="none"
+                        name="25th-75th percentile"
+                      />
+                      {/* Upper band: p75 to p95 */}
+                      <Area
+                        type="monotone"
+                        dataKey="band_upper"
+                        stackId="mc"
+                        fill="#2D5A27"
+                        fillOpacity={0.08}
+                        stroke="none"
+                        name="75th-95th percentile"
+                      />
+
+                      {/* Median line */}
+                      <Line
+                        type="monotone"
+                        dataKey="median"
+                        stroke="#2D5A27"
+                        strokeWidth={2}
+                        dot={false}
+                        name="median"
+                      />
+                      {/* Deterministic overlay */}
+                      <Line
+                        type="monotone"
+                        dataKey="deterministic"
+                        stroke="#878787"
+                        strokeWidth={1.5}
+                        strokeDasharray="6 3"
+                        dot={false}
+                        name="deterministic"
+                        connectNulls
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Summary stats */}
+                <div className="grid grid-cols-4 gap-3 mt-4">
+                  <div>
+                    <div className="text-[11px] uppercase tracking-widest text-text-secondary font-medium">Success Rate</div>
+                    <div className="text-lg font-semibold tracking-tight mt-0.5">
+                      {(mcResult!.successRate * 100).toFixed(1)}%
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] uppercase tracking-widest text-text-secondary font-medium">Median Final</div>
+                    <div className="text-lg font-semibold tracking-tight mt-0.5">
+                      {formatCurrency(String(Math.round(mcResult!.median[mcResult!.median.length - 1]?.netWorth ?? 0)))}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] uppercase tracking-widest text-text-secondary font-medium">Worst Case (5th)</div>
+                    <div className="text-lg font-semibold tracking-tight mt-0.5 text-danger">
+                      {formatCurrency(String(Math.round(mcResult!.percentiles.p5[mcResult!.percentiles.p5.length - 1]?.netWorth ?? 0)))}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] uppercase tracking-widest text-text-secondary font-medium">Best Case (95th)</div>
+                    <div className="text-lg font-semibold tracking-tight mt-0.5 text-primary">
+                      {formatCurrency(String(Math.round(mcResult!.percentiles.p95[mcResult!.percentiles.p95.length - 1]?.netWorth ?? 0)))}
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-text-secondary/60 mt-3">
+                  Based on {mcResult!.iterations.toLocaleString()} simulations with regime-switching market model. Darker bands represent more likely outcomes.
+                </p>
+              </>
+            )}
           </Card>
 
           {/* Year-by-year table */}
