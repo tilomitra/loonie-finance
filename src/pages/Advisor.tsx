@@ -66,6 +66,9 @@ export function Advisor() {
         setIsStreaming(false)
         setError(err.message)
       },
+    }).catch((err) => {
+      setIsStreaming(false)
+      setError(err instanceof Error ? err.message : String(err))
     })
   }, [apiKey, messages, systemPrompt])
 
