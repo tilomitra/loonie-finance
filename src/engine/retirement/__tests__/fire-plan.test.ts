@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import Decimal from 'decimal.js'
 import { calculateIncomeTimeline, calculateEffectiveFireNumber } from '../fire-plan'
-import { calculateFirePlan, type FirePlanInputs } from '../fire-plan'
+import { calculateFirePlan, calculateRrspComparison, type FirePlanInputs } from '../fire-plan'
 
 describe('calculateIncomeTimeline', () => {
   const baseInputs = {
@@ -213,5 +213,74 @@ describe('calculateFirePlan', () => {
     })
     expect(result.rrspComparison.early.annualWithdrawal.toNumber()).toBe(0)
     expect(result.rrspComparison.deferred.annualWithdrawal.toNumber()).toBe(0)
+  })
+})
+
+describe('calculateRrspComparison', () => {
+  const inputs: FirePlanInputs = {
+    currentAge: 35,
+    targetFireAge: 50,
+    lifeExpectancy: 90,
+    currentNetWorth: new Decimal('300000'),
+    annualSavings: new Decimal('40000'),
+    currentAnnualExpenses: new Decimal('50000'),
+    postFireAnnualSpending: new Decimal('45000'),
+    leanExpenses: new Decimal('30000'),
+    fatExpenses: new Decimal('70000'),
+    postFireAnnualIncome: new Decimal('10000'),
+    hasSpouse: false,
+    spouseAnnualIncome: new Decimal('0'),
+    spousePortfolio: new Decimal('0'),
+    cppStartAge: 65,
+    oasStartAge: 65,
+    rrspWithdrawalStartAge: 55,
+    rrspBalance: new Decimal('100000'),
+    withdrawalRate: new Decimal('0.04'),
+    inflationRate: new Decimal('0.02'),
+    expectedReturnRate: new Decimal('0.05'),
+    yearsContributedCPP: 20,
+    province: 'ON',
+  }
+
+  it('should return early and deferred strategies', () => {
+    const result = calculateRrspComparison(inputs)
+    expect(result.early).toBeDefined()
+    expect(result.deferred).toBeDefined()
+    expect(result.early.startAge).toBe(55)
+    expect(result.deferred.startAge).toBe(71)
+  })
+
+  it('should have larger balance for deferred strategy', () => {
+    const result = calculateRrspComparison(inputs)
+    expect(result.deferred.balanceAtStart.toNumber())
+      .toBeGreaterThan(result.early.balanceAtStart.toNumber())
+  })
+
+  it('should compute annual withdrawal and tax for both', () => {
+    const result = calculateRrspComparison(inputs)
+    expect(result.early.annualWithdrawal.toNumber()).toBeGreaterThan(0)
+    expect(result.deferred.annualWithdrawal.toNumber()).toBeGreaterThan(0)
+    expect(result.early.marginalTaxRate.toNumber()).toBeGreaterThanOrEqual(0)
+    expect(result.deferred.marginalTaxRate.toNumber()).toBeGreaterThanOrEqual(0)
+  })
+
+  it('should compute total after-tax income for both', () => {
+    const result = calculateRrspComparison(inputs)
+    expect(result.early.totalAfterTaxIncome.toNumber()).toBeGreaterThan(0)
+    expect(result.deferred.totalAfterTaxIncome.toNumber()).toBeGreaterThan(0)
+  })
+
+  it('should include portfolio longevity impact', () => {
+    const result = calculateRrspComparison(inputs)
+    expect(typeof result.early.portfolioLongevityImpactYears).toBe('number')
+    expect(typeof result.deferred.portfolioLongevityImpactYears).toBe('number')
+  })
+
+  it('should flag OAS clawback risk for large deferred balances', () => {
+    const result = calculateRrspComparison({
+      ...inputs,
+      rrspBalance: new Decimal('800000'),
+    })
+    expect(typeof result.oasClawbackWarning).toBe('boolean')
   })
 })

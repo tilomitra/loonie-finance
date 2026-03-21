@@ -198,14 +198,63 @@ export interface BenefitRecommendation {
   monthlyAt65: Decimal
 }
 
-// Stub — replaced in Task 4
 export function calculateRrspComparison(inputs: FirePlanInputs): RrspComparison {
-  const zero = new Decimal(0)
-  const stub: RrspStrategyResult = {
-    startAge: inputs.rrspWithdrawalStartAge, balanceAtStart: zero, annualWithdrawal: zero,
-    marginalTaxRate: zero, totalAfterTaxIncome: zero, portfolioLongevityImpactYears: 0,
+  const realReturn = inputs.expectedReturnRate.minus(inputs.inflationRate)
+
+  const computeStrategy = (startAge: number): RrspStrategyResult => {
+    const yearsGrowing = startAge - inputs.currentAge
+    const balanceAtStart = compoundGrowth(inputs.rrspBalance, realReturn, yearsGrowing)
+
+    const yearsWithdrawing = Math.max(inputs.lifeExpectancy - startAge, 1)
+    // Level annual withdrawal to deplete over retirement (annuity formula)
+    let annualWithdrawal: Decimal
+    if (realReturn.eq(0)) {
+      annualWithdrawal = balanceAtStart.div(yearsWithdrawing)
+    } else {
+      const r = realReturn
+      const factor = new Decimal(1).minus(r.plus(1).pow(-yearsWithdrawing))
+      annualWithdrawal = balanceAtStart.times(r).div(factor)
+    }
+
+    const taxResult = calculateTotalTax(annualWithdrawal, inputs.province)
+    const afterTaxAnnual = annualWithdrawal.minus(taxResult.totalTax)
+    const totalAfterTaxIncome = afterTaxAnnual.times(yearsWithdrawing)
+
+    // Portfolio longevity impact estimate
+    const spendingGap = inputs.postFireAnnualSpending.minus(inputs.postFireAnnualIncome)
+      .minus(inputs.hasSpouse ? inputs.spouseAnnualIncome : 0)
+    const gapWithRrsp = Decimal.max(spendingGap.minus(afterTaxAnnual), 0)
+    const gapWithout = Decimal.max(spendingGap, 0)
+
+    let longevityImpact = 0
+    if (gapWithout.gt(0) && gapWithRrsp.lt(gapWithout)) {
+      const annualReduction = gapWithout.minus(gapWithRrsp)
+      if (annualReduction.gt(0) && realReturn.gt(0)) {
+        longevityImpact = Math.round(totalAfterTaxIncome.div(gapWithout).toNumber())
+      }
+    }
+
+    return {
+      startAge,
+      balanceAtStart: balanceAtStart.toDecimalPlaces(0),
+      annualWithdrawal: annualWithdrawal.toDecimalPlaces(0),
+      marginalTaxRate: taxResult.marginalRate,
+      totalAfterTaxIncome: totalAfterTaxIncome.toDecimalPlaces(0),
+      portfolioLongevityImpactYears: longevityImpact,
+    }
   }
-  return { early: stub, deferred: { ...stub, startAge: 71 }, recommendEarly: false, oasClawbackWarning: false }
+
+  const early = computeStrategy(inputs.rrspWithdrawalStartAge)
+  const deferred = computeStrategy(71)
+
+  const oasClawbackWarning = deferred.annualWithdrawal.toNumber() > 90997
+
+  return {
+    early,
+    deferred,
+    recommendEarly: early.totalAfterTaxIncome.gt(deferred.totalAfterTaxIncome),
+    oasClawbackWarning,
+  }
 }
 
 // Stub — replaced in Task 5
