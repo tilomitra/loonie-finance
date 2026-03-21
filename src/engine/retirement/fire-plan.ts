@@ -1,6 +1,10 @@
 import Decimal from 'decimal.js'
 import { estimateCppBenefit } from './cpp-benefit'
 import { estimateOasBenefit } from './oas-benefit'
+import { calculateYearsToFire, type FireType } from './fire'
+import { calculateTotalTax } from '../tax/calculate-tax'
+import { compoundGrowth } from '../projection/compound'
+import type { Province } from '@/types'
 
 export interface IncomeTimelineInputs {
   fireAge: number
@@ -121,4 +125,170 @@ function portfolioSurvives(
     if (portfolio.lt(0)) return false
   }
   return true
+}
+
+export interface FirePlanInputs {
+  currentAge: number
+  targetFireAge: number
+  lifeExpectancy: number
+  currentNetWorth: Decimal
+  annualSavings: Decimal
+  currentAnnualExpenses: Decimal
+  postFireAnnualSpending: Decimal
+  leanExpenses: Decimal
+  fatExpenses: Decimal
+  postFireAnnualIncome: Decimal
+  hasSpouse: boolean
+  spouseAnnualIncome: Decimal
+  spousePortfolio: Decimal
+  cppStartAge: number
+  oasStartAge: number
+  rrspWithdrawalStartAge: number
+  rrspBalance: Decimal
+  withdrawalRate: Decimal
+  inflationRate: Decimal
+  expectedReturnRate: Decimal
+  yearsContributedCPP: number
+  province: Province
+}
+
+export interface FireTypeResult {
+  type: FireType
+  effectiveNumber: Decimal
+  yearsToFire: number | null
+  progress: number
+}
+
+export interface FirePlanResult {
+  feasibility: {
+    isOnTrack: boolean
+    effectiveFireNumber: Decimal
+    currentTotal: Decimal
+    gap: Decimal
+    projectedFireAge: number
+  }
+  fireTypes: FireTypeResult[]
+  incomeTimeline: TimelineYear[]
+  rrspComparison: RrspComparison
+  benefitRecommendation: BenefitRecommendation
+}
+
+export interface RrspStrategyResult {
+  startAge: number
+  balanceAtStart: Decimal
+  annualWithdrawal: Decimal
+  marginalTaxRate: Decimal
+  totalAfterTaxIncome: Decimal
+  portfolioLongevityImpactYears: number
+}
+
+export interface RrspComparison {
+  early: RrspStrategyResult
+  deferred: RrspStrategyResult
+  recommendEarly: boolean
+  oasClawbackWarning: boolean
+}
+
+export interface BenefitRecommendation {
+  recommendedCppAge: number
+  recommendedOasAge: number
+  reasoning: string
+  cppBreakEvenAge: number
+  monthlyAtRecommended: Decimal
+  monthlyAt65: Decimal
+}
+
+// Stub — replaced in Task 4
+export function calculateRrspComparison(inputs: FirePlanInputs): RrspComparison {
+  const zero = new Decimal(0)
+  const stub: RrspStrategyResult = {
+    startAge: inputs.rrspWithdrawalStartAge, balanceAtStart: zero, annualWithdrawal: zero,
+    marginalTaxRate: zero, totalAfterTaxIncome: zero, portfolioLongevityImpactYears: 0,
+  }
+  return { early: stub, deferred: { ...stub, startAge: 71 }, recommendEarly: false, oasClawbackWarning: false }
+}
+
+// Stub — replaced in Task 5
+export function calculateBenefitRecommendation(inputs: FirePlanInputs): BenefitRecommendation {
+  return {
+    recommendedCppAge: 65, recommendedOasAge: 65, reasoning: '',
+    cppBreakEvenAge: 80, monthlyAtRecommended: new Decimal(0), monthlyAt65: new Decimal(0),
+  }
+}
+
+export function calculateFirePlan(inputs: FirePlanInputs): FirePlanResult {
+  const currentTotal = inputs.currentNetWorth.plus(
+    inputs.hasSpouse ? inputs.spousePortfolio : 0
+  )
+  const realReturn = inputs.expectedReturnRate.minus(inputs.inflationRate)
+  const spouseIncome = inputs.hasSpouse ? inputs.spouseAnnualIncome : new Decimal(0)
+
+  const makeTimelineInputs = (spending: Decimal): IncomeTimelineInputs => ({
+    fireAge: inputs.targetFireAge,
+    lifeExpectancy: inputs.lifeExpectancy,
+    postFireAnnualSpending: spending,
+    postFireAnnualIncome: inputs.postFireAnnualIncome,
+    spouseAnnualIncome: spouseIncome,
+    cppStartAge: inputs.cppStartAge,
+    oasStartAge: inputs.oasStartAge,
+    yearsContributedCPP: inputs.yearsContributedCPP,
+    inflationRate: inputs.inflationRate,
+    expectedReturnRate: inputs.expectedReturnRate,
+  })
+
+  const regularNumber = calculateEffectiveFireNumber(makeTimelineInputs(inputs.postFireAnnualSpending))
+  const leanNumber = calculateEffectiveFireNumber(makeTimelineInputs(inputs.leanExpenses))
+  const fatNumber = calculateEffectiveFireNumber(makeTimelineInputs(inputs.fatExpenses))
+
+  const yearsToFire = inputs.targetFireAge - inputs.currentAge
+  const coastNumber = yearsToFire > 0
+    ? regularNumber.div(realReturn.plus(1).pow(yearsToFire))
+    : regularNumber
+
+  const regularTimeline = calculateIncomeTimeline(makeTimelineInputs(inputs.postFireAnnualSpending))
+  const baristaIncome = regularTimeline.reduce(
+    (max, year) => Decimal.max(max, year.portfolioWithdrawal),
+    new Decimal(0)
+  )
+
+  const makeFireType = (type: FireType, effectiveNumber: Decimal): FireTypeResult => {
+    const progress = effectiveNumber.gt(0)
+      ? Math.min(currentTotal.div(effectiveNumber).toNumber(), 1)
+      : 1
+    const years = effectiveNumber.gt(0)
+      ? calculateYearsToFire(currentTotal, inputs.annualSavings, effectiveNumber, realReturn)
+      : 0
+    return { type, effectiveNumber, yearsToFire: years, progress }
+  }
+
+  const fireTypes: FireTypeResult[] = [
+    makeFireType('lean', leanNumber),
+    makeFireType('regular', regularNumber),
+    makeFireType('fat', fatNumber),
+    makeFireType('coast', coastNumber),
+    { type: 'barista', effectiveNumber: baristaIncome, yearsToFire: null, progress: 0 },
+  ]
+
+  const regularType = fireTypes.find(t => t.type === 'regular')!
+  const projectedFireAge = regularType.yearsToFire !== null
+    ? inputs.currentAge + regularType.yearsToFire
+    : inputs.currentAge + 100
+  const gap = Decimal.max(regularNumber.minus(currentTotal), 0)
+
+  const rrspComparison = calculateRrspComparison(inputs)
+  const benefitRecommendation = calculateBenefitRecommendation(inputs)
+
+  return {
+    feasibility: {
+      isOnTrack: projectedFireAge <= inputs.targetFireAge,
+      effectiveFireNumber: regularNumber,
+      currentTotal,
+      gap,
+      projectedFireAge: Math.min(projectedFireAge, inputs.currentAge + 100),
+    },
+    fireTypes,
+    incomeTimeline: regularTimeline,
+    rrspComparison,
+    benefitRecommendation,
+  }
 }

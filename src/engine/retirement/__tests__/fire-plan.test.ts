@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import Decimal from 'decimal.js'
 import { calculateIncomeTimeline, calculateEffectiveFireNumber } from '../fire-plan'
+import { calculateFirePlan, type FirePlanInputs } from '../fire-plan'
 
 describe('calculateIncomeTimeline', () => {
   const baseInputs = {
@@ -115,5 +116,102 @@ describe('calculateEffectiveFireNumber', () => {
       spouseAnnualIncome: new Decimal('30000'),
     })
     expect(withSpouse.toNumber()).toBeLessThan(solo.toNumber())
+  })
+})
+
+describe('calculateFirePlan', () => {
+  const planInputs: FirePlanInputs = {
+    currentAge: 35,
+    targetFireAge: 50,
+    lifeExpectancy: 90,
+    currentNetWorth: new Decimal('300000'),
+    annualSavings: new Decimal('40000'),
+    currentAnnualExpenses: new Decimal('50000'),
+    postFireAnnualSpending: new Decimal('45000'),
+    leanExpenses: new Decimal('30000'),
+    fatExpenses: new Decimal('70000'),
+    postFireAnnualIncome: new Decimal('10000'),
+    hasSpouse: false,
+    spouseAnnualIncome: new Decimal('0'),
+    spousePortfolio: new Decimal('0'),
+    cppStartAge: 65,
+    oasStartAge: 65,
+    rrspWithdrawalStartAge: 65,
+    rrspBalance: new Decimal('100000'),
+    withdrawalRate: new Decimal('0.04'),
+    inflationRate: new Decimal('0.02'),
+    expectedReturnRate: new Decimal('0.05'),
+    yearsContributedCPP: 20,
+    province: 'ON',
+  }
+
+  it('should return feasibility with on-track or gap info', () => {
+    const result = calculateFirePlan(planInputs)
+    expect(result.feasibility).toBeDefined()
+    expect(typeof result.feasibility.isOnTrack).toBe('boolean')
+    expect(result.feasibility.effectiveFireNumber.toNumber()).toBeGreaterThan(0)
+    expect(result.feasibility.currentTotal.toNumber()).toBe(300000)
+    expect(result.feasibility.projectedFireAge).toBeGreaterThanOrEqual(planInputs.currentAge)
+  })
+
+  it('should return all 5 FIRE types', () => {
+    const result = calculateFirePlan(planInputs)
+    expect(result.fireTypes).toHaveLength(5)
+    const types = result.fireTypes.map(t => t.type)
+    expect(types).toContain('lean')
+    expect(types).toContain('regular')
+    expect(types).toContain('fat')
+    expect(types).toContain('coast')
+    expect(types).toContain('barista')
+  })
+
+  it('should have lean < regular < fat effective numbers', () => {
+    const result = calculateFirePlan(planInputs)
+    const lean = result.fireTypes.find(t => t.type === 'lean')!
+    const regular = result.fireTypes.find(t => t.type === 'regular')!
+    const fat = result.fireTypes.find(t => t.type === 'fat')!
+    expect(lean.effectiveNumber.toNumber()).toBeLessThan(regular.effectiveNumber.toNumber())
+    expect(regular.effectiveNumber.toNumber()).toBeLessThan(fat.effectiveNumber.toNumber())
+  })
+
+  it('should include spouse portfolio in currentTotal', () => {
+    const result = calculateFirePlan({
+      ...planInputs,
+      hasSpouse: true,
+      spousePortfolio: new Decimal('100000'),
+    })
+    expect(result.feasibility.currentTotal.toNumber()).toBe(400000)
+  })
+
+  it('should return income timeline', () => {
+    const result = calculateFirePlan(planInputs)
+    expect(result.incomeTimeline.length).toBe(90 - 50)
+  })
+
+  it('should handle already-FI case when income covers spending', () => {
+    const result = calculateFirePlan({
+      ...planInputs,
+      postFireAnnualIncome: new Decimal('50000'),
+    })
+    const regular = result.fireTypes.find(t => t.type === 'regular')!
+    expect(regular.effectiveNumber.toNumber()).toBe(0)
+  })
+
+  it('should handle retire-now case when targetFireAge <= currentAge', () => {
+    const result = calculateFirePlan({
+      ...planInputs,
+      targetFireAge: 35,
+    })
+    expect(result.feasibility).toBeDefined()
+    expect(result.incomeTimeline.length).toBe(90 - 35)
+  })
+
+  it('should handle zero RRSP balance', () => {
+    const result = calculateFirePlan({
+      ...planInputs,
+      rrspBalance: new Decimal('0'),
+    })
+    expect(result.rrspComparison.early.annualWithdrawal.toNumber()).toBe(0)
+    expect(result.rrspComparison.deferred.annualWithdrawal.toNumber()).toBe(0)
   })
 })
