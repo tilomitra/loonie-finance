@@ -34,8 +34,10 @@ export function SettingsPage() {
     rrspCumulativeContributions: '',
     fhsaCumulativeContributions: '',
     fhsaFirstHomeOwner: true,
+    openaiApiKey: '',
   })
   const [saved, setSaved] = useState(false)
+  const [showKey, setShowKey] = useState(false)
 
   useEffect(() => {
     if (profile) {
@@ -48,6 +50,7 @@ export function SettingsPage() {
         rrspCumulativeContributions: profile.rrspCumulativeContributions,
         fhsaCumulativeContributions: profile.fhsaCumulativeContributions,
         fhsaFirstHomeOwner: profile.fhsaFirstHomeOwner,
+        openaiApiKey: profile.openaiApiKey ?? '',
       })
     }
   }, [profile])
@@ -107,7 +110,7 @@ export function SettingsPage() {
         </div>
       </Card>
 
-      <Card className="mb-6">
+      <Card className="mb-4">
         <CardHeader>
           <CardTitle>Registered Accounts</CardTitle>
           <CardDescription>Cumulative lifetime contributions to date.</CardDescription>
@@ -144,6 +147,38 @@ export function SettingsPage() {
             />
             I am a first-time home buyer (eligible for FHSA)
           </label>
+        </div>
+      </Card>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>AI Integration</CardTitle>
+          <CardDescription>Connect to OpenAI for personalized financial advice.</CardDescription>
+        </CardHeader>
+
+        <div className="space-y-4">
+          <div className="relative">
+            <Input
+              label="OpenAI API Key"
+              type={showKey ? 'text' : 'password'}
+              value={form.openaiApiKey}
+              onChange={(e) => setForm(f => ({ ...f, openaiApiKey: e.target.value }))}
+              placeholder="sk-..."
+            />
+            <button
+              type="button"
+              onClick={() => setShowKey(k => !k)}
+              className="absolute right-3 top-7 text-[12px] text-text-secondary hover:text-text"
+            >
+              {showKey ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          <p className="text-[12px] text-text-secondary">
+            Your API key is stored locally and sent directly to OpenAI. Get one at{' '}
+            <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+              platform.openai.com
+            </a>
+          </p>
         </div>
       </Card>
 
