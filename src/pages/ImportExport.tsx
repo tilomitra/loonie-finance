@@ -3,6 +3,8 @@ import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/Ca
 import { Button } from '@/components/ui/Button'
 import { db } from '@/db/database'
 import { Download, Upload, Trash2, AlertTriangle } from 'lucide-react'
+import { DEFAULT_RETURN_RATES } from '@/engine/projection/account-defaults'
+import type { AccountType } from '@/types'
 
 interface ExportData {
   version: 1
@@ -60,6 +62,16 @@ export function ImportExport() {
           throw new Error('Invalid file format')
         }
 
+        // Normalize legacy accounts (v1 had assetAllocation instead of expectedReturnRate)
+        const normalizedAccounts = (data.accounts as Record<string, unknown>[]).map(account => {
+          if (!('expectedReturnRate' in account)) {
+            const type = (account.type as AccountType) || 'non-registered'
+            account.expectedReturnRate = DEFAULT_RETURN_RATES[type] ?? '5.0'
+          }
+          delete account.assetAllocation
+          return account
+        })
+
         // Clear existing data
         await db.accounts.clear()
         await db.balanceHistory.clear()
@@ -68,7 +80,7 @@ export function ImportExport() {
         await db.snapshots.clear()
 
         // Import new data
-        if (data.accounts?.length) await db.accounts.bulkAdd(data.accounts as never[])
+        if (normalizedAccounts.length) await db.accounts.bulkAdd(normalizedAccounts as never[])
         if (data.balanceHistory?.length) await db.balanceHistory.bulkAdd(data.balanceHistory as never[])
         if (data.scenarios?.length) await db.scenarios.bulkAdd(data.scenarios as never[])
         if (data.userProfile?.length) await db.userProfile.bulkAdd(data.userProfile as never[])
