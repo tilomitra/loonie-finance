@@ -102,18 +102,6 @@ export interface ProjectionPoint {
   accountBreakdown: Record<string, string>
 }
 
-export interface MonteCarloResult {
-  percentiles: {
-    p5: ProjectionPoint[]
-    p25: ProjectionPoint[]
-    p50: ProjectionPoint[]
-    p75: ProjectionPoint[]
-    p95: ProjectionPoint[]
-  }
-  successRate: number
-  iterations: number
-}
-
 // Helper to check if an account type is a debt
 export function isDebtType(type: AccountType): boolean {
   return type.startsWith('debt-')
