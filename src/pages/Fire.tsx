@@ -11,7 +11,7 @@ import { isDebtType } from '@/types'
 import Decimal from 'decimal.js'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, ReferenceLine, Legend,
+  ResponsiveContainer, Legend,
 } from 'recharts'
 import { Flame, TrendingUp, Coffee, Leaf, Crown, CheckCircle, AlertTriangle } from 'lucide-react'
 
@@ -29,14 +29,6 @@ const FIRE_COLORS: Record<string, string> = {
   fat: '#B91C1C',
   coast: '#2D5A27',
   barista: '#7C5C3E',
-}
-
-const TIMELINE_COLORS = {
-  portfolioWithdrawal: '#3b82f6',
-  postFireIncome: '#22c55e',
-  spouseIncome: '#a855f7',
-  cpp: '#f97316',
-  oas: '#14b8a6',
 }
 
 function generateOptions(start: number, end: number): { value: string; label: string }[] {
@@ -75,22 +67,27 @@ export function Fire() {
     return new Date().getFullYear() - new Date(profile.dateOfBirth).getFullYear()
   }, [profile])
 
-  const { netWorth, rrspBalance, weightedReturnRate } = useMemo(() => {
-    let totalAssets = new Decimal(0)
-    let totalDebts = new Decimal(0)
+  const { totalAssets, totalDebts, netWorth, rrspBalance, weightedReturnRate, assetAccounts, debtAccounts } = useMemo(() => {
+    let assets = new Decimal(0)
+    let debts = new Decimal(0)
     let rrsp = new Decimal(0)
     let weightedSum = new Decimal(0)
     let totalNonDebtBalance = new Decimal(0)
+    const assetAccts: { balance: Decimal; rate: Decimal }[] = []
+    const debtAccts: { balance: Decimal; rate: Decimal }[] = []
 
     for (const account of accounts) {
       const balance = new Decimal(account.balance || '0')
       if (isDebtType(account.type)) {
-        totalDebts = totalDebts.plus(balance)
+        debts = debts.plus(balance)
+        const rate = new Decimal(account.interestRate || '0').div(100)
+        debtAccts.push({ balance, rate })
       } else {
-        totalAssets = totalAssets.plus(balance)
+        assets = assets.plus(balance)
         const rate = new Decimal(account.expectedReturnRate || '0').div(100)
         weightedSum = weightedSum.plus(balance.times(rate))
         totalNonDebtBalance = totalNonDebtBalance.plus(balance)
+        assetAccts.push({ balance, rate })
       }
       if (account.type === 'rrsp') {
         rrsp = rrsp.plus(balance)
@@ -98,11 +95,15 @@ export function Fire() {
     }
 
     return {
-      netWorth: totalAssets.minus(totalDebts),
+      totalAssets: assets,
+      totalDebts: debts,
+      netWorth: assets.minus(debts),
       rrspBalance: rrsp,
       weightedReturnRate: totalNonDebtBalance.gt(0)
         ? weightedSum.div(totalNonDebtBalance)
         : new Decimal(0.05),
+      assetAccounts: assetAccts,
+      debtAccounts: debtAccts,
     }
   }, [accounts])
 
@@ -143,17 +144,149 @@ export function Fire() {
     return estimateOasBenefit(65, parseFloat(params.postFireSpending) || 50000)
   }, [params.postFireSpending])
 
-  // Chart data from income timeline
-  const chartData = useMemo(() => {
-    return plan.incomeTimeline.map(year => ({
-      age: year.age,
-      'Portfolio Withdrawal': year.portfolioWithdrawal.toNumber(),
-      'Post-FIRE Income': year.postFireIncome.toNumber(),
-      'Spouse Income': year.spouseIncome.toNumber(),
-      CPP: year.cppIncome.toNumber(),
-      OAS: year.oasIncome.toNumber(),
+  // Yearly breakdown table data — projects assets and debts independently
+  const yearlyBreakdown = useMemo(() => {
+    const currentYear = new Date().getFullYear()
+    const rows: {
+      year: number
+      age: number
+      totalPortfolio: Decimal
+      totalAssets: Decimal
+      totalDebts: Decimal
+      totalContributions: Decimal
+      growthFromReturns: Decimal
+      coastFireNumber: Decimal
+      note: string
+    }[] = []
+
+    const annualSavings = new Decimal(params.annualSavings || '0')
+    const realReturn = weightedReturnRate.minus(new Decimal(params.inflationRate || '0.02'))
+    const regularFireNumber = plan.feasibility.effectiveFireNumber
+
+    // Track each asset/debt account independently with its own rate
+    const assetBalances = assetAccounts.map(a => ({ ...a, current: a.balance }))
+    const debtBalances = debtAccounts.map(d => ({ ...d, current: d.balance }))
+
+    const initialAssets = totalAssets
+    const initialDebts = totalDebts
+    let cumulativeContributions = new Decimal(0)
+    let coastFireReached = false
+    let fireReached = false
+
+    for (let age = currentAge; age <= params.lifeExpectancy; age++) {
+      const year = currentYear + (age - currentAge)
+
+      // Sum current asset and debt totals
+      const currentAssetTotal = assetBalances.reduce((sum, a) => sum.plus(a.current), new Decimal(0))
+      const currentDebtTotal = debtBalances.reduce((sum, d) => sum.plus(d.current), new Decimal(0))
+      const portfolio = currentAssetTotal.minus(currentDebtTotal)
+
+      const yearsToTarget = Math.max(params.targetFireAge - age, 0)
+      const coastNumber = yearsToTarget > 0
+        ? regularFireNumber.div(realReturn.plus(1).pow(yearsToTarget))
+        : regularFireNumber
+
+      let note = ''
+      if (age === currentAge) {
+        note = 'Starting Point'
+      } else if (age < params.targetFireAge) {
+        if (!coastFireReached && portfolio.gte(coastNumber)) {
+          coastFireReached = true
+          note = 'CoastFIRE Reached!'
+        } else if (!fireReached && portfolio.gte(regularFireNumber)) {
+          fireReached = true
+          note = 'FIRE Reached!'
+        } else {
+          note = 'Saving'
+        }
+      } else if (age === params.targetFireAge) {
+        fireReached = true
+        note = 'FIRE!'
+      } else {
+        note = 'Retired'
+      }
+
+      // Growth from returns = change in assets beyond contributions, plus debt reduction from interest
+      const assetGrowth = currentAssetTotal.minus(initialAssets).minus(cumulativeContributions)
+      const debtReduction = initialDebts.minus(currentDebtTotal)
+      const growthFromReturns = assetGrowth.plus(debtReduction)
+
+      rows.push({
+        year,
+        age,
+        totalPortfolio: portfolio.toDecimalPlaces(0),
+        totalAssets: currentAssetTotal.toDecimalPlaces(0),
+        totalDebts: currentDebtTotal.toDecimalPlaces(0),
+        totalContributions: cumulativeContributions.toDecimalPlaces(0),
+        growthFromReturns: growthFromReturns.toDecimalPlaces(0),
+        coastFireNumber: coastNumber.toDecimalPlaces(0),
+        note,
+      })
+
+      // Advance each account to next year
+      if (age < params.targetFireAge) {
+        // Assets: grow at individual rates, distribute savings proportionally
+        const assetTotal = currentAssetTotal.gt(0) ? currentAssetTotal : new Decimal(1)
+        for (const asset of assetBalances) {
+          asset.current = asset.current.times(asset.rate.plus(1))
+          // Distribute savings proportionally by balance weight
+          const weight = currentAssetTotal.gt(0) ? asset.current.div(assetTotal) : new Decimal(1).div(assetBalances.length || 1)
+          asset.current = asset.current.plus(annualSavings.times(weight))
+        }
+        // Debts: accrue interest, then wind down (interest makes debt grow, payments reduce it)
+        for (const debt of debtBalances) {
+          if (debt.current.gt(0)) {
+            debt.current = debt.current.times(debt.rate.plus(1)) // interest accrues
+            // Assume minimum payments wind down the debt (simplified amortization)
+            // Without explicit payment info, debts amortize over remaining pre-FIRE years
+            const yearsLeft = Math.max(params.targetFireAge - age, 1)
+            const annualPayment = debt.current.div(yearsLeft)
+            debt.current = Decimal.max(debt.current.minus(annualPayment), 0)
+          }
+        }
+        cumulativeContributions = cumulativeContributions.plus(annualSavings)
+      } else {
+        // Post-FIRE: assets grow, subtract withdrawals; debts continue winding down
+        const timelineYear = plan.incomeTimeline.find(y => y.age === age)
+        const withdrawal = timelineYear ? timelineYear.portfolioWithdrawal : new Decimal(0)
+
+        const assetTotal = currentAssetTotal.gt(0) ? currentAssetTotal : new Decimal(1)
+        for (const asset of assetBalances) {
+          asset.current = asset.current.times(asset.rate.plus(1))
+          // Distribute withdrawal proportionally
+          if (withdrawal.gt(0) && currentAssetTotal.gt(0)) {
+            const weight = asset.current.div(assetTotal)
+            asset.current = Decimal.max(asset.current.minus(withdrawal.times(weight)), 0)
+          }
+        }
+        for (const debt of debtBalances) {
+          if (debt.current.gt(0)) {
+            debt.current = debt.current.times(debt.rate.plus(1))
+            // Post-FIRE, assume debts continue amortizing over 10-year horizon
+            const annualPayment = debt.current.div(10)
+            debt.current = Decimal.max(debt.current.minus(annualPayment), 0)
+          }
+        }
+      }
+    }
+
+    return rows
+  }, [currentAge, totalAssets, totalDebts, assetAccounts, debtAccounts, params, plan, weightedReturnRate])
+
+  // Portfolio growth chart data — derived from yearlyBreakdown
+  const portfolioChartData = useMemo(() => {
+    const initialPortfolio = yearlyBreakdown.length > 0
+      ? yearlyBreakdown[0].totalPortfolio.toNumber()
+      : 0
+    return yearlyBreakdown.map(row => ({
+      year: row.year,
+      'Initial Principal': initialPortfolio,
+      'Contributions': row.totalContributions.toNumber(),
+      'Growth from Returns': Math.max(row.growthFromReturns.toNumber(), 0),
+      'CoastFIRE Number': row.coastFireNumber.toNumber(),
+      'Required at Retirement': plan.feasibility.effectiveFireNumber.toNumber(),
     }))
-  }, [plan])
+  }, [yearlyBreakdown, plan])
 
   const rrspStartOptions = useMemo(() => {
     return generateOptions(Math.max(params.targetFireAge, currentAge + 1), 71)
@@ -426,45 +559,103 @@ export function Fire() {
             })}
           </div>
 
-          {/* 3. Income Timeline Stacked Area Chart */}
+          {/* 3. Portfolio Growth Projection Chart */}
           <Card>
             <CardHeader>
-              <CardTitle>Income Timeline</CardTitle>
-              <CardDescription>Projected income sources from FIRE age to life expectancy</CardDescription>
+              <CardTitle>Portfolio Growth Projection</CardTitle>
+              <CardDescription>How your portfolio grows from principal, contributions, and returns</CardDescription>
             </CardHeader>
-            <div className="h-72">
+            <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
+                <AreaChart data={portfolioChartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#E8E8E4" />
                   <XAxis
-                    dataKey="age"
+                    dataKey="year"
                     tick={{ fontSize: 11, fill: '#878787' }}
-                    label={{ value: 'Age', position: 'insideBottom', offset: -2, fontSize: 11, fill: '#878787' }}
+                    label={{ value: 'Year', position: 'insideBottom', offset: -2, fontSize: 11, fill: '#878787' }}
                   />
                   <YAxis
-                    tickFormatter={v => `$${(v / 1000).toFixed(0)}K`}
+                    tickFormatter={v => v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(1)}M` : `$${(v / 1000).toFixed(0)}K`}
                     tick={{ fontSize: 11, fill: '#878787' }}
+                    label={{ value: 'Portfolio Value ($)', angle: -90, position: 'insideLeft', offset: 10, fontSize: 11, fill: '#878787' }}
                   />
                   <Tooltip
                     formatter={(v) => formatCurrency(String(Math.round(Number(v))))}
                     contentStyle={{ borderRadius: '8px', border: '1px solid #E8E8E4', fontSize: '13px', boxShadow: 'none' }}
                   />
                   <Legend wrapperStyle={{ fontSize: '11px' }} />
-                  <ReferenceLine x={params.cppStartAge} stroke="#f97316" strokeDasharray="3 3" label={{ value: 'CPP', fontSize: 10, fill: '#f97316' }} />
-                  <ReferenceLine x={params.oasStartAge} stroke="#14b8a6" strokeDasharray="3 3" label={{ value: 'OAS', fontSize: 10, fill: '#14b8a6' }} />
-                  <Area type="monotone" dataKey="Portfolio Withdrawal" stackId="1" stroke={TIMELINE_COLORS.portfolioWithdrawal} fill={TIMELINE_COLORS.portfolioWithdrawal} fillOpacity={0.6} />
-                  <Area type="monotone" dataKey="Post-FIRE Income" stackId="1" stroke={TIMELINE_COLORS.postFireIncome} fill={TIMELINE_COLORS.postFireIncome} fillOpacity={0.6} />
-                  {params.hasSpouse && (
-                    <Area type="monotone" dataKey="Spouse Income" stackId="1" stroke={TIMELINE_COLORS.spouseIncome} fill={TIMELINE_COLORS.spouseIncome} fillOpacity={0.6} />
-                  )}
-                  <Area type="monotone" dataKey="CPP" stackId="1" stroke={TIMELINE_COLORS.cpp} fill={TIMELINE_COLORS.cpp} fillOpacity={0.6} />
-                  <Area type="monotone" dataKey="OAS" stackId="1" stroke={TIMELINE_COLORS.oas} fill={TIMELINE_COLORS.oas} fillOpacity={0.6} />
+                  <Area type="monotone" dataKey="Initial Principal" stackId="1" stroke="#6882b5" fill="#6882b5" fillOpacity={0.35} />
+                  <Area type="monotone" dataKey="Contributions" stackId="1" stroke="#4A7C44" fill="#4A7C44" fillOpacity={0.4} />
+                  <Area type="monotone" dataKey="Growth from Returns" stackId="1" stroke="#d4a017" fill="#d4a017" fillOpacity={0.3} />
+                  <Area type="monotone" dataKey="CoastFIRE Number" stackId="0" stroke="#c2185b" fill="none" strokeDasharray="6 3" strokeWidth={2} />
+                  <Area type="monotone" dataKey="Required at Retirement" stackId="0" stroke="#7b1fa2" fill="none" strokeDasharray="6 3" strokeWidth={2} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </Card>
 
-          {/* 4. RRSP Strategy Comparison */}
+          {/* 4. Yearly Breakdown Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Yearly Breakdown</CardTitle>
+              <CardDescription>Portfolio growth from now through retirement</CardDescription>
+            </CardHeader>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="border-b border-border text-left">
+                    <th className="py-2 px-3 font-semibold text-text-secondary">Year</th>
+                    <th className="py-2 px-3 font-semibold text-text-secondary">Age</th>
+                    <th className="py-2 px-3 font-semibold text-text-secondary text-right">Assets</th>
+                    <th className="py-2 px-3 font-semibold text-text-secondary text-right">Debts</th>
+                    <th className="py-2 px-3 font-semibold text-text-secondary text-right">Net Portfolio</th>
+                    <th className="py-2 px-3 font-semibold text-text-secondary text-right">Contributions</th>
+                    <th className="py-2 px-3 font-semibold text-text-secondary text-right">Growth</th>
+                    <th className="py-2 px-3 font-semibold text-text-secondary text-right">CoastFIRE #</th>
+                    <th className="py-2 px-3 font-semibold text-text-secondary">Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {yearlyBreakdown.map((row) => (
+                    <tr
+                      key={row.year}
+                      className={`border-b border-border/50 ${
+                        row.note === 'FIRE!' || row.note === 'FIRE Reached!'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/20'
+                          : row.note === 'CoastFIRE Reached!'
+                            ? 'bg-blue-50 dark:bg-blue-950/20'
+                            : ''
+                      }`}
+                    >
+                      <td className="py-1.5 px-3">{row.year}</td>
+                      <td className="py-1.5 px-3">{row.age}</td>
+                      <td className="py-1.5 px-3 text-right text-emerald-600 dark:text-emerald-400">{formatCurrency(row.totalAssets.toString())}</td>
+                      <td className="py-1.5 px-3 text-right text-red-500 dark:text-red-400">
+                        {row.totalDebts.gt(0) ? `-${formatCurrency(row.totalDebts.toString())}` : '$0'}
+                      </td>
+                      <td className="py-1.5 px-3 text-right font-medium">{formatCurrency(row.totalPortfolio.toString())}</td>
+                      <td className="py-1.5 px-3 text-right">{formatCurrency(row.totalContributions.toString())}</td>
+                      <td className="py-1.5 px-3 text-right">{formatCurrency(row.growthFromReturns.toString())}</td>
+                      <td className="py-1.5 px-3 text-right">{formatCurrency(row.coastFireNumber.toString())}</td>
+                      <td className="py-1.5 px-3">
+                        <span className={`text-[12px] ${
+                          row.note === 'FIRE!' || row.note === 'FIRE Reached!'
+                            ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
+                            : row.note === 'CoastFIRE Reached!'
+                              ? 'text-blue-600 dark:text-blue-400 font-semibold'
+                              : 'text-text-secondary'
+                        }`}>
+                          {row.note}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          {/* 5. RRSP Strategy Comparison */}
           <Card>
             <CardHeader>
               <CardTitle>RRSP Strategy Comparison</CardTitle>
