@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
@@ -34,6 +34,11 @@ export function Tax() {
   const profile = useUserProfile()
   const [income, setIncome] = useState(profile?.annualIncome || '100000')
   const [province, setProvince] = useState<Province>(profile?.province || 'ON')
+
+  useEffect(() => {
+    if (profile?.annualIncome) setIncome(profile.annualIncome)
+    if (profile?.province) setProvince(profile.province)
+  }, [profile?.annualIncome, profile?.province])
 
   const taxResult = useMemo(() => {
     const inc = new Decimal(income || '0')
