@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { useAccount, useBalanceHistory } from '@/db/hooks'
 import { formatCurrency, formatCurrencyPrecise } from '@/lib/utils'
 import { ACCOUNT_TYPE_LABELS } from '@/types'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Pencil } from 'lucide-react'
 
 export function AccountDetail() {
   const { id } = useParams<{ id: string }>()
@@ -40,8 +40,16 @@ export function AccountDetail() {
             {account.institution && ` · ${account.institution}`}
           </p>
         </div>
-        <div className="text-2xl font-semibold text-primary tracking-tight">
-          {formatCurrency(account.balance)}
+        <div className="flex items-center gap-3">
+          <div className="text-2xl font-semibold text-primary tracking-tight">
+            {formatCurrency(account.balance)}
+          </div>
+          <Button
+            variant="secondary"
+            onClick={() => navigate('/accounts', { state: { editAccountId: account.id } })}
+          >
+            <Pencil className="w-3.5 h-3.5" /> Edit
+          </Button>
         </div>
       </div>
 

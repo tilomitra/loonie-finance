@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Dialog } from '@/components/ui/Dialog'
@@ -25,6 +25,7 @@ const currencyOptions = [
 export function Accounts() {
   const accounts = useAccounts()
   const navigate = useNavigate()
+  const location = useLocation()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState({
@@ -38,6 +39,15 @@ export function Accounts() {
     notes: '',
   })
   const [returnRateEdited, setReturnRateEdited] = useState(false)
+
+  useEffect(() => {
+    const state = location.state as { editAccountId?: string } | null
+    if (state?.editAccountId && accounts.length > 0) {
+      openEdit(state.editAccountId)
+      // Clear the state so it doesn't re-trigger
+      navigate(location.pathname, { replace: true })
+    }
+  }, [location.state, accounts])
 
   const resetForm = () => {
     setForm({ name: '', type: 'tfsa', balance: '', currency: 'CAD', institution: '', interestRate: '', expectedReturnRate: DEFAULT_RETURN_RATES['tfsa'], notes: '' })
