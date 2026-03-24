@@ -8,9 +8,14 @@ import { db } from '@/db/database'
 import { formatCurrency, generateId } from '@/lib/utils'
 import { projectNetWorth } from '@/engine/projection/project-net-worth'
 import type { ScenarioAssumptions, Province } from '@/types'
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Line } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Line, LineChart } from 'recharts'
 import { Plus, TrendingUp } from 'lucide-react'
 import { runMonteCarloSimulation, type MonteCarloResult } from '@/engine/projection/monte-carlo'
+
+const ACCOUNT_COLORS = [
+  '#2D5A27', '#1a6b8a', '#8b5cf6', '#d97706', '#dc2626',
+  '#0891b2', '#65a30d', '#c026d3', '#ea580c', '#475569',
+]
 
 const provinceOptions = [
   { value: 'AB', label: 'Alberta' },
@@ -52,6 +57,7 @@ export function Projections() {
   const [mcIterations, setMcIterations] = useState(1000)
   const [mcResult, setMcResult] = useState<MonteCarloResult | null>(null)
   const [mcRunning, setMcRunning] = useState(false)
+  const [showAccountBreakdown, setShowAccountBreakdown] = useState(false)
 
   const currentAge = useMemo(() => {
     if (!profile?.dateOfBirth) return 30
@@ -69,13 +75,19 @@ export function Projections() {
       startYear: new Date().getFullYear(),
     })
 
-    return points.map(p => ({
-      age: p.age,
-      year: p.year,
-      netWorth: p.netWorth.toNumber(),
-      assets: p.totalAssets.toNumber(),
-      debts: p.totalDebts.toNumber(),
-    }))
+    return points.map(p => {
+      const row: Record<string, number> = {
+        age: p.age,
+        year: p.year,
+        netWorth: p.netWorth.toNumber(),
+        assets: p.totalAssets.toNumber(),
+        debts: p.totalDebts.toNumber(),
+      }
+      for (const account of accounts) {
+        row[`account_${account.id}`] = (p.accountBreakdown[account.id] || p.netWorth).toNumber()
+      }
+      return row
+    })
   }, [accounts, assumptions, currentAge])
 
   const handleSaveScenario = async () => {
@@ -228,49 +240,92 @@ export function Projections() {
         <div className="lg:col-span-3 space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Net Worth Projection</CardTitle>
-              <CardDescription>
-                Projected growth from age {currentAge} to {assumptions.lifeExpectancy}
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Net Worth Projection</CardTitle>
+                  <CardDescription>
+                    Projected growth from age {currentAge} to {assumptions.lifeExpectancy}
+                  </CardDescription>
+                </div>
+                <Button
+                  variant={showAccountBreakdown ? 'primary' : 'secondary'}
+                  size="sm"
+                  onClick={() => setShowAccountBreakdown(v => !v)}
+                >
+                  {showAccountBreakdown ? 'Show Totals' : 'Show Accounts'}
+                </Button>
+              </div>
             </CardHeader>
             <div className="h-96">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={projectionData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#E8E8E4" />
-                  <XAxis
-                    dataKey="age"
-                    tick={{ fontSize: 11, fill: '#878787' }}
-                    label={{ value: 'Age', position: 'insideBottom', offset: -5, style: { fontSize: 11, fill: '#878787' } }}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 11, fill: '#878787' }}
-                    tickFormatter={(v) => `$${(v / 1000).toFixed(0)}K`}
-                  />
-                  <Tooltip
-                    formatter={(v) => formatCurrency(String(v))}
-                    labelFormatter={(age) => `Age ${age}`}
-                    contentStyle={{ borderRadius: '8px', border: '1px solid #E8E8E4', fontSize: '13px', boxShadow: 'none' }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: '12px' }} />
-                  <Area
-                    type="monotone"
-                    dataKey="assets"
-                    name="Assets"
-                    stackId="1"
-                    stroke="#4A7C44"
-                    fill="#4A7C44"
-                    fillOpacity={0.15}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="netWorth"
-                    name="Net Worth"
-                    stroke="#2D5A27"
-                    fill="#2D5A27"
-                    fillOpacity={0.08}
-                    strokeWidth={2}
-                  />
-                </AreaChart>
+                {showAccountBreakdown ? (
+                  <LineChart data={projectionData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E8E8E4" />
+                    <XAxis
+                      dataKey="age"
+                      tick={{ fontSize: 11, fill: '#878787' }}
+                      label={{ value: 'Age', position: 'insideBottom', offset: -5, style: { fontSize: 11, fill: '#878787' } }}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11, fill: '#878787' }}
+                      tickFormatter={(v) => `$${(v / 1000).toFixed(0)}K`}
+                    />
+                    <Tooltip
+                      formatter={(v) => formatCurrency(String(v))}
+                      labelFormatter={(age) => `Age ${age}`}
+                      contentStyle={{ borderRadius: '8px', border: '1px solid #E8E8E4', fontSize: '13px', boxShadow: 'none' }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: '12px' }} />
+                    {accounts.map((account, i) => (
+                      <Line
+                        key={account.id}
+                        type="monotone"
+                        dataKey={`account_${account.id}`}
+                        name={account.name}
+                        stroke={ACCOUNT_COLORS[i % ACCOUNT_COLORS.length]}
+                        strokeWidth={2}
+                        dot={false}
+                      />
+                    ))}
+                  </LineChart>
+                ) : (
+                  <AreaChart data={projectionData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E8E8E4" />
+                    <XAxis
+                      dataKey="age"
+                      tick={{ fontSize: 11, fill: '#878787' }}
+                      label={{ value: 'Age', position: 'insideBottom', offset: -5, style: { fontSize: 11, fill: '#878787' } }}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 11, fill: '#878787' }}
+                      tickFormatter={(v) => `$${(v / 1000).toFixed(0)}K`}
+                    />
+                    <Tooltip
+                      formatter={(v) => formatCurrency(String(v))}
+                      labelFormatter={(age) => `Age ${age}`}
+                      contentStyle={{ borderRadius: '8px', border: '1px solid #E8E8E4', fontSize: '13px', boxShadow: 'none' }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: '12px' }} />
+                    <Area
+                      type="monotone"
+                      dataKey="assets"
+                      name="Assets"
+                      stackId="1"
+                      stroke="#4A7C44"
+                      fill="#4A7C44"
+                      fillOpacity={0.15}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="netWorth"
+                      name="Net Worth"
+                      stroke="#2D5A27"
+                      fill="#2D5A27"
+                      fillOpacity={0.08}
+                      strokeWidth={2}
+                    />
+                  </AreaChart>
+                )}
               </ResponsiveContainer>
             </div>
           </Card>
