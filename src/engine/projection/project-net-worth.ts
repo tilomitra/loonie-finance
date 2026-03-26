@@ -21,13 +21,17 @@ export interface ProjectionPoint {
 }
 
 /**
- * Get expected annual return rate for an account
+ * Get expected annual return rate for an account (assets only)
  */
 function getAccountReturnRate(account: Account): Decimal {
-  if (isDebtType(account.type)) {
-    return new Decimal(account.interestRate || '0').div(100).neg()
-  }
   return new Decimal(account.expectedReturnRate || '0').div(100)
+}
+
+/**
+ * Get annual interest rate for a debt account
+ */
+function getDebtInterestRate(account: Account): Decimal {
+  return new Decimal(account.interestRate || '0').div(100)
 }
 
 /**
@@ -61,21 +65,17 @@ export function projectNetWorth(input: ProjectionInput): ProjectionPoint[] {
 
     for (const account of accounts) {
       const balance = balances[account.id]
-      const returnRate = getAccountReturnRate(account)
-
-      // Grow the account
-      const growth = balance.times(returnRate)
-      balances[account.id] = balance.plus(growth)
-
-      // Add annual contributions
       const annualContrib = contributionMap[account.id] || new Decimal(0)
-      if (annualContrib.gt(0)) {
-        balances[account.id] = balances[account.id].plus(annualContrib)
-      }
 
-      // For debts, apply payments (contributions reduce debt)
-      if (isDebtType(account.type) && annualContrib.gt(0)) {
-        balances[account.id] = Decimal.max(balances[account.id].minus(annualContrib.times(2)), 0)
+      if (isDebtType(account.type)) {
+        // Debts: interest accrues, payments reduce balance, floor at 0
+        const interest = balance.times(getDebtInterestRate(account))
+        const payment = annualContrib.gt(0) ? annualContrib : new Decimal(0)
+        balances[account.id] = Decimal.max(balance.plus(interest).minus(payment), new Decimal(0))
+      } else {
+        // Assets: compound growth + contributions
+        const returnRate = getAccountReturnRate(account)
+        balances[account.id] = balance.times(returnRate.plus(1)).plus(annualContrib)
       }
     }
 
@@ -182,21 +182,17 @@ export function projectNetWorthWithEvents(input: ProjectionInputV2): ProjectionP
     // -----------------------------------------------------------------------
     for (const account of accounts) {
       const balance = balances[account.id]
-      const returnRate = getAccountReturnRate(account)
-
-      // Compound growth
-      const growth = balance.times(returnRate)
-      balances[account.id] = balance.plus(growth)
-
-      // Deliberate monthly contributions (converted to annual)
       const annualContrib = contributionMap[account.id] || new Decimal(0)
-      if (annualContrib.gt(0)) {
-        balances[account.id] = balances[account.id].plus(annualContrib)
-      }
 
-      // For debts, contributions reduce the balance (payments)
-      if (isDebtType(account.type) && annualContrib.gt(0)) {
-        balances[account.id] = Decimal.max(balances[account.id].minus(annualContrib.times(2)), 0)
+      if (isDebtType(account.type)) {
+        // Debts: interest accrues, payments reduce balance, floor at 0
+        const interest = balance.times(getDebtInterestRate(account))
+        const payment = annualContrib.gt(0) ? annualContrib : new Decimal(0)
+        balances[account.id] = Decimal.max(balance.plus(interest).minus(payment), new Decimal(0))
+      } else {
+        // Assets: compound growth + contributions
+        const returnRate = getAccountReturnRate(account)
+        balances[account.id] = balance.times(returnRate.plus(1)).plus(annualContrib)
       }
     }
 
