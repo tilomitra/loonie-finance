@@ -716,13 +716,15 @@ export function Fire() {
           <Card>
             <CardHeader>
               <CardTitle>Portfolio Growth Projection</CardTitle>
-              <CardDescription>Year-by-year breakdown from now to retirement</CardDescription>
+              <CardDescription>Year-by-year breakdown from now to age {params.lifeExpectancy}</CardDescription>
             </CardHeader>
             <YearlyBreakdown
               currentAge={currentAge}
               retirementAge={params.targetFireAge}
+              lifeExpectancy={params.lifeExpectancy}
               accounts={accounts}
               annualSavings={new Decimal(params.annualSavings || '0')}
+              annualExpenses={new Decimal(params.postFireSpending || '0')}
               inflationRate={new Decimal(params.inflationRate || '0.02')}
               fireTargets={plan.fireTypes.map(t => ({
                 type: t.type,

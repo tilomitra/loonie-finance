@@ -7,8 +7,10 @@ import { isDebtType } from '@/types'
 interface YearlyBreakdownProps {
   currentAge: number
   retirementAge: number
+  lifeExpectancy: number
   accounts: Account[]
   annualSavings: Decimal
+  annualExpenses: Decimal
   inflationRate: Decimal
   fireTargets: {
     type: string
@@ -30,8 +32,10 @@ interface ProjectionRow {
 export function YearlyBreakdown({
   currentAge,
   retirementAge,
+  lifeExpectancy,
   accounts,
   annualSavings,
+  annualExpenses,
   inflationRate,
   fireTargets,
 }: YearlyBreakdownProps) {
@@ -70,7 +74,7 @@ export function YearlyBreakdown({
 
     let fireAchievedYear: number | null = null
 
-    for (let i = 0; i <= retirementAge - currentAge; i++) {
+    for (let i = 0; i <= lifeExpectancy - currentAge; i++) {
       const age = currentAge + i
       const year = startYear + i
 
@@ -98,13 +102,17 @@ export function YearlyBreakdown({
         fireAchievedYear = year
       }
 
+      const isRetired = age >= retirementAge
+
       let status: string
       if (i === 0) {
         status = 'Starting Point'
-      } else if (isAchieved && year === fireAchievedYear) {
-        status = 'FIRE Achieved!'
       } else if (age === retirementAge) {
         status = 'Retirement'
+      } else if (isRetired) {
+        status = 'Retired'
+      } else if (isAchieved && year === fireAchievedYear) {
+        status = 'FIRE Achieved!'
       } else if (isAchieved) {
         status = 'Coasting'
       } else {
@@ -129,12 +137,19 @@ export function YearlyBreakdown({
       for (const account of assetAccounts) {
         const bal = balances[account.id]
         const returnRate = new Decimal(account.expectedReturnRate || '0').div(100)
-        // Distribute savings proportionally by balance weight
         const weight = totalAssetBal.gt(0)
           ? bal.div(totalAssetBal)
           : new Decimal(1).div(assetAccounts.length || 1)
-        const contrib = annualSavings.times(weight)
-        balances[account.id] = bal.plus(contrib).times(returnRate.plus(1))
+
+        if (isRetired) {
+          // Post-retirement: withdraw expenses proportionally, no contributions
+          const withdrawal = annualExpenses.times(weight)
+          balances[account.id] = Decimal.max(bal.minus(withdrawal).times(returnRate.plus(1)), new Decimal(0))
+        } else {
+          // Pre-retirement: contribute savings proportionally
+          const contrib = annualSavings.times(weight)
+          balances[account.id] = bal.plus(contrib).times(returnRate.plus(1))
+        }
       }
 
       // Debts: accrue interest, subtract annual payments, floor at zero
@@ -149,7 +164,7 @@ export function YearlyBreakdown({
     }
 
     return rows
-  }, [currentAge, retirementAge, accounts, annualSavings, realReturn, regularTarget])
+  }, [currentAge, retirementAge, lifeExpectancy, accounts, annualSavings, annualExpenses, realReturn, regularTarget])
 
   return (
     <div>
@@ -184,7 +199,7 @@ export function YearlyBreakdown({
                   <td className="py-1.5 px-3 tabular-nums">{row.year}</td>
                   <td className="py-1.5 px-3 tabular-nums">{row.age}</td>
                   <td className="py-1.5 px-3 text-right tabular-nums">{formatCurrency(row.totalAssets.toString())}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums text-danger">{row.totalDebts.gt(0) ? formatCurrency(row.totalDebts.toString()) : '—'}</td>
+                  <td className="py-1.5 px-3 text-right tabular-nums text-blue-500">{row.totalDebts.gt(0) ? formatCurrency(row.totalDebts.toString()) : '—'}</td>
                   <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatCurrency(row.netWorth.toString())}</td>
                   <td className="py-1.5 px-3 text-right tabular-nums">{formatCurrency(row.fireNumber.toString())}</td>
                   <td className={`py-1.5 px-3 ${isHighlight ? 'text-accent' : ''}`}>{row.status}</td>
