@@ -1,33 +1,89 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { useAccounts, useUserProfile, useLifeEvents } from '@/db/hooks'
-import { formatCurrency } from '@/lib/utils'
+import { db } from '@/db/database'
 import { calculateFirePlan } from '@/engine/retirement/fire-plan'
-import { calculateWithdrawalPlan } from '@/engine/retirement/withdrawal-sequence'
-import { estimateCppBenefitAllAges } from '@/engine/retirement/cpp-benefit'
+import { estimateCppBenefit } from '@/engine/retirement/cpp-benefit'
 import { estimateOasBenefit } from '@/engine/retirement/oas-benefit'
 import { isDebtType } from '@/types'
 import Decimal from 'decimal.js'
-import { AlertTriangle, ChevronDown, ChevronUp, Users } from 'lucide-react'
+import { ChevronDown, ChevronUp, Users } from 'lucide-react'
 import { ProgressGauge } from '@/components/fire/ProgressGauge'
+import { FireDetailBreakdown, type IncomeBreakdownData } from '@/components/fire/FireDetailBreakdown'
 import { MilestoneTimeline } from '@/components/fire/MilestoneTimeline'
 import { NextMilestone } from '@/components/fire/NextMilestone'
-import { WithdrawalPlanView } from '@/components/fire/WithdrawalPlanView'
+import { YearlyBreakdown } from '@/components/fire/YearlyBreakdown'
 import { StatusStrip } from '@/components/fire/StatusStrip'
-import { ProjectionChart } from '@/components/fire/ProjectionChart'
 import { LifeEventsSection } from '@/components/fire/LifeEventsSection'
 
 type ViewMode = 'self' | 'partner' | 'household'
 
+const STORAGE_KEY = 'loonie-fire-settings'
+
+const DEFAULT_PARAMS = {
+  annualExpenses: '50000',
+  postFireSpending: '50000',
+  leanExpenses: '35000',
+  fatExpenses: '80000',
+  annualSavings: '30000',
+  annualIncome: '85000',
+  targetFireAge: 50,
+  lifeExpectancy: 90,
+  postFireIncome: '0',
+  hasSpouse: false,
+  spouseIncome: '0',
+  spousePortfolio: '0',
+  cppStartAge: 65,
+  oasStartAge: 65,
+  rrspStartAge: 65,
+  yearsContributedCPP: 20,
+  withdrawalRate: '0.04',
+  inflationRate: '0.02',
+  tfsaCumulativeContributions: '',
+  rrspCumulativeContributions: '',
+  fhsaCumulativeContributions: '',
+  fhsaFirstHomeOwner: true,
+}
+
+type FireParams = typeof DEFAULT_PARAMS
+
+function loadParams(): FireParams {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      return { ...DEFAULT_PARAMS, ...parsed }
+    }
+  } catch {}
+  return { ...DEFAULT_PARAMS }
+}
+
+function saveParams(params: FireParams) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(params))
+}
+
+const ACCENT = '#E8680C'
+const ACHIEVED = '#6B8F71'
+
 const FIRE_CONFIG = {
-  coast: { color: '#3b82f6', bg: '#eff6ff', label: 'Coast FIRE' },
-  lean: { color: '#22c55e', bg: '#f0fdf4', label: 'Lean FIRE' },
-  barista: { color: '#f97316', bg: '#fff7ed', label: 'Barista FIRE' },
-  regular: { color: '#a855f7', bg: '#faf5ff', label: 'Regular FIRE' },
-  fat: { color: '#ef4444', bg: '#fef2f2', label: 'Fat FIRE' },
+  barista: { label: 'Barista FIRE' },
+  coast: { label: 'Coast FIRE' },
+  lean: { label: 'Lean FIRE' },
+  regular: { label: 'FIRE' },
+  fat: { label: 'Fat FIRE' },
 } as const
+
+function fireColor(achieved: boolean) {
+  return achieved ? ACHIEVED : ACCENT
+}
+
+function fireBg(achieved: boolean) {
+  return achieved ? '#6B8F7108' : '#E8680C08'
+}
+
+const FIRE_ORDER: (keyof typeof FIRE_CONFIG)[] = ['barista', 'coast', 'lean', 'regular', 'fat']
 
 function generateOptions(start: number, end: number): { value: string; label: string }[] {
   const opts: { value: string; label: string }[] = []
@@ -44,25 +100,62 @@ export function Fire() {
 
   const [viewMode, setViewMode] = useState<ViewMode>('self')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [selectedFireType, setSelectedFireType] = useState<string | null>(null)
 
-  const [params, setParams] = useState({
-    annualExpenses: '50000',
-    postFireSpending: '50000',
-    leanExpenses: '35000',
-    fatExpenses: '80000',
-    annualSavings: '30000',
-    targetFireAge: 50,
-    lifeExpectancy: 90,
-    postFireIncome: '0',
-    hasSpouse: false,
-    spouseIncome: '0',
-    spousePortfolio: '0',
-    cppStartAge: 65,
-    oasStartAge: 65,
-    rrspStartAge: 65,
-    withdrawalRate: '0.04',
-    inflationRate: '0.02',
-  })
+  const [params, setParams] = useState<FireParams>(loadParams)
+  const [draft, setDraft] = useState<FireParams>(loadParams)
+  const [isDirty, setIsDirty] = useState(false)
+  const profileSeeded = useRef(false)
+
+  // Seed profile fields into draft on first profile load (if not already in localStorage)
+  useEffect(() => {
+    if (profile && !profileSeeded.current) {
+      profileSeeded.current = true
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (!stored) {
+        // No saved FIRE settings — seed from profile
+        const seeded: Partial<FireParams> = {
+          annualIncome: profile.annualIncome || DEFAULT_PARAMS.annualIncome,
+          yearsContributedCPP: profile.yearsContributedCPP || DEFAULT_PARAMS.yearsContributedCPP,
+          tfsaCumulativeContributions: profile.tfsaCumulativeContributions || '',
+          rrspCumulativeContributions: profile.rrspCumulativeContributions || '',
+          fhsaCumulativeContributions: profile.fhsaCumulativeContributions || '',
+          fhsaFirstHomeOwner: profile.fhsaFirstHomeOwner ?? true,
+        }
+        setDraft(d => ({ ...d, ...seeded }))
+        setParams(p => ({ ...p, ...seeded }))
+      }
+    }
+  }, [profile])
+
+  const updateDraft = useCallback((updater: (prev: FireParams) => FireParams) => {
+    setDraft(prev => {
+      const next = updater(prev)
+      setIsDirty(true)
+      return next
+    })
+  }, [])
+
+  const handleCalculate = useCallback(() => {
+    setParams(draft)
+    saveParams(draft)
+    setIsDirty(false)
+
+    // Sync profile fields back to Dexie so other features (AI advisor, contribution room) stay current
+    if (profile) {
+      const now = Date.now()
+      db.userProfile.put({
+        ...profile,
+        annualIncome: draft.annualIncome,
+        yearsContributedCPP: draft.yearsContributedCPP,
+        tfsaCumulativeContributions: draft.tfsaCumulativeContributions,
+        rrspCumulativeContributions: draft.rrspCumulativeContributions,
+        fhsaCumulativeContributions: draft.fhsaCumulativeContributions,
+        fhsaFirstHomeOwner: draft.fhsaFirstHomeOwner,
+        updatedAt: now,
+      })
+    }
+  }, [draft, profile])
 
   const currentAge = useMemo(() => {
     if (!profile?.dateOfBirth) return 30
@@ -107,7 +200,7 @@ export function Fire() {
       currentAge,
       targetFireAge: params.targetFireAge,
       lifeExpectancy: params.lifeExpectancy,
-      currentNetWorth: netWorth,
+      currentNetWorth: totalAssets,
       annualSavings: new Decimal(params.annualSavings || '0'),
       currentAnnualExpenses: new Decimal(params.annualExpenses || '0'),
       postFireAnnualSpending: new Decimal(params.postFireSpending || '0'),
@@ -124,45 +217,22 @@ export function Fire() {
       withdrawalRate: new Decimal(params.withdrawalRate || '0.04'),
       inflationRate: new Decimal(params.inflationRate || '0.02'),
       expectedReturnRate: weightedReturnRate,
-      yearsContributedCPP: profile?.yearsContributedCPP || 20,
+      yearsContributedCPP: params.yearsContributedCPP,
       province: profile?.province || 'ON',
     })
   }, [currentAge, params, netWorth, rrspBalance, weightedReturnRate, profile])
 
-  // Withdrawal plan
-  const withdrawalPlan = useMemo(() => {
-    if (accounts.length === 0) return null
-    try {
-      return calculateWithdrawalPlan({
-        accounts,
-        lifeEvents,
-        selfProfile: {
-          currentAge,
-          province: profile?.province || 'ON',
-          yearsContributedCPP: profile?.yearsContributedCPP || 20,
-          cppStartAge: params.cppStartAge,
-          oasStartAge: params.oasStartAge,
-        },
-        retirementAge: params.targetFireAge,
-        lifeExpectancy: params.lifeExpectancy,
-        annualExpenses: new Decimal(params.postFireSpending || '50000'),
-        inflationRate: new Decimal(params.inflationRate || '0.02'),
-        expectedReturnRate: weightedReturnRate,
-      })
-    } catch {
-      return null
+
+
+  // CPP/OAS monthly estimates for income breakdown
+  const govtBenefits = useMemo(() => {
+    const cpp = estimateCppBenefit(params.cppStartAge, profile?.yearsContributedCPP || 20, 0.75)
+    const oas = estimateOasBenefit(params.oasStartAge, parseFloat(params.postFireSpending) || 50000)
+    return {
+      monthlyCpp: cpp.monthlyBenefit.toNumber(),
+      monthlyOas: oas.netMonthlyBenefit.toNumber(),
     }
-  }, [accounts, lifeEvents, currentAge, profile, params, weightedReturnRate])
-
-  // CPP estimates for benefit table
-  const cppEstimates = useMemo(() => {
-    return estimateCppBenefitAllAges(profile?.yearsContributedCPP || 20, 0.75)
-  }, [profile])
-
-  // OAS estimate
-  const oasEstimate = useMemo(() => {
-    return estimateOasBenefit(65, parseFloat(params.postFireSpending) || 50000)
-  }, [params.postFireSpending])
+  }, [params.cppStartAge, params.oasStartAge, params.postFireSpending, profile])
 
   const rrspStartOptions = useMemo(() => {
     return generateOptions(Math.max(params.targetFireAge, currentAge + 1), 71)
@@ -193,42 +263,22 @@ export function Fire() {
     return new Decimal(params.annualSavings || '0').div(12).toString()
   }, [params.annualSavings])
 
-  // ScenarioAssumptions for ProjectionChart
-  const assumptions = useMemo(() => {
-    const annualIncome = parseFloat(params.annualExpenses) + parseFloat(params.annualSavings || '0')
-    const annualSavingsRateNum = annualIncome > 0
-      ? parseFloat(params.annualSavings || '0') / annualIncome
-      : 0
-    return {
-      inflationRate: params.inflationRate,
-      salaryGrowthRate: '0.02',
-      retirementAge: params.targetFireAge,
-      lifeExpectancy: params.lifeExpectancy,
-      cppStartAge: params.cppStartAge,
-      oasStartAge: params.oasStartAge,
-      province: (profile?.province || 'ON') as import('@/types').Province,
-      annualIncome: String(annualIncome),
-      annualExpenses: params.annualExpenses,
-      annualSavingsRate: String(annualSavingsRateNum),
-      monthlyContributions: [] as import('@/types').MonthlyContribution[],
-    }
-  }, [params, profile])
 
-  const sectionHeading = 'text-[11px] font-semibold text-text-secondary uppercase tracking-wide mb-2'
+  const sectionHeading = 'text-[10px] font-semibold text-text-secondary uppercase tracking-widest mb-2'
 
   return (
     <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <h1 className="font-serif text-2xl">FIRE Progress</h1>
+        <h1 className="text-[14px] font-bold uppercase tracking-widest">FIRE Progress</h1>
 
         {/* View toggle */}
-        <div className="flex items-center gap-1 bg-surface border border-border rounded-lg p-1">
+        <div className="flex items-center gap-0 border border-border">
           {(['self', 'partner', 'household'] as ViewMode[]).map((mode) => (
             <button
               key={mode}
               onClick={() => setViewMode(mode)}
-              className={`px-3 py-1.5 rounded-md text-[12px] font-medium transition-all capitalize ${
+              className={`px-3 py-1.5 text-[11px] font-medium transition-all uppercase tracking-wide border-r border-border last:border-r-0 ${
                 viewMode === mode
                   ? 'bg-text text-surface'
                   : 'text-text-secondary hover:text-text'
@@ -257,10 +307,10 @@ export function Fire() {
         <Card className="mb-6">
           <div className="text-center py-10">
             <Users className="w-10 h-10 text-border mx-auto mb-3" strokeWidth={1.5} />
-            <h3 className="font-serif text-lg mb-1">
+            <h3 className="text-[13px] font-semibold uppercase tracking-widest mb-1">
               {viewMode === 'partner' ? 'Partner View' : 'Household View'} Coming Soon
             </h3>
-            <p className="text-text-secondary text-[13px]">
+            <p className="text-text-secondary text-[12px]">
               {viewMode === 'partner'
                 ? 'Partner tracking will be available in a future update.'
                 : 'Combined household projections are on the roadmap.'}
@@ -277,7 +327,7 @@ export function Fire() {
               className="w-full flex items-center justify-between"
               onClick={() => setSettingsOpen(v => !v)}
             >
-              <span className="font-semibold text-[14px]">FIRE Settings</span>
+              <span className="text-[11px] font-semibold uppercase tracking-widest">FIRE Settings</span>
               {settingsOpen
                 ? <ChevronUp className="w-4 h-4 text-text-secondary" />
                 : <ChevronDown className="w-4 h-4 text-text-secondary" />
@@ -293,14 +343,34 @@ export function Fire() {
                     <Input
                       label="Target FIRE Age"
                       type="number"
-                      value={params.targetFireAge.toString()}
-                      onChange={e => setParams(p => ({ ...p, targetFireAge: parseInt(e.target.value) || 50 }))}
+                      value={draft.targetFireAge.toString()}
+                      onChange={e => updateDraft(p => ({ ...p, targetFireAge: parseInt(e.target.value) || 50 }))}
                     />
                     <Input
                       label="Life Expectancy"
                       type="number"
-                      value={params.lifeExpectancy.toString()}
-                      onChange={e => setParams(p => ({ ...p, lifeExpectancy: parseInt(e.target.value) || 90 }))}
+                      value={draft.lifeExpectancy.toString()}
+                      onChange={e => updateDraft(p => ({ ...p, lifeExpectancy: parseInt(e.target.value) || 90 }))}
+                    />
+                  </div>
+                </div>
+
+                {/* Income & CPP */}
+                <div>
+                  <h3 className={sectionHeading}>Income & CPP</h3>
+                  <div className="space-y-3">
+                    <Input
+                      label="Annual Income"
+                      type="number"
+                      value={draft.annualIncome}
+                      onChange={e => updateDraft(p => ({ ...p, annualIncome: e.target.value }))}
+                      placeholder="e.g., 85000"
+                    />
+                    <Input
+                      label="Years Contributed to CPP"
+                      type="number"
+                      value={draft.yearsContributedCPP.toString()}
+                      onChange={e => updateDraft(p => ({ ...p, yearsContributedCPP: parseInt(e.target.value) || 0 }))}
                     />
                   </div>
                 </div>
@@ -312,32 +382,32 @@ export function Fire() {
                     <Input
                       label="Current Expenses"
                       type="number"
-                      value={params.annualExpenses}
-                      onChange={e => setParams(p => ({ ...p, annualExpenses: e.target.value }))}
+                      value={draft.annualExpenses}
+                      onChange={e => updateDraft(p => ({ ...p, annualExpenses: e.target.value }))}
                     />
                     <Input
                       label="Post-FIRE Spending"
                       type="number"
-                      value={params.postFireSpending}
-                      onChange={e => setParams(p => ({ ...p, postFireSpending: e.target.value }))}
+                      value={draft.postFireSpending}
+                      onChange={e => updateDraft(p => ({ ...p, postFireSpending: e.target.value }))}
                     />
                     <Input
                       label="Lean Expenses"
                       type="number"
-                      value={params.leanExpenses}
-                      onChange={e => setParams(p => ({ ...p, leanExpenses: e.target.value }))}
+                      value={draft.leanExpenses}
+                      onChange={e => updateDraft(p => ({ ...p, leanExpenses: e.target.value }))}
                     />
                     <Input
                       label="Fat Expenses"
                       type="number"
-                      value={params.fatExpenses}
-                      onChange={e => setParams(p => ({ ...p, fatExpenses: e.target.value }))}
+                      value={draft.fatExpenses}
+                      onChange={e => updateDraft(p => ({ ...p, fatExpenses: e.target.value }))}
                     />
                     <Input
                       label="Annual Savings"
                       type="number"
-                      value={params.annualSavings}
-                      onChange={e => setParams(p => ({ ...p, annualSavings: e.target.value }))}
+                      value={draft.annualSavings}
+                      onChange={e => updateDraft(p => ({ ...p, annualSavings: e.target.value }))}
                     />
                   </div>
                 </div>
@@ -349,34 +419,34 @@ export function Fire() {
                     <Input
                       label="Post-FIRE Income"
                       type="number"
-                      value={params.postFireIncome}
-                      onChange={e => setParams(p => ({ ...p, postFireIncome: e.target.value }))}
+                      value={draft.postFireIncome}
+                      onChange={e => updateDraft(p => ({ ...p, postFireIncome: e.target.value }))}
                     />
                     <div className="flex items-center gap-2">
                       <input
                         type="checkbox"
                         id="has-spouse"
-                        checked={params.hasSpouse}
-                        onChange={e => setParams(p => ({ ...p, hasSpouse: e.target.checked }))}
+                        checked={draft.hasSpouse}
+                        onChange={e => updateDraft(p => ({ ...p, hasSpouse: e.target.checked }))}
                         className="rounded border-border"
                       />
                       <label htmlFor="has-spouse" className="text-[12px] font-medium text-text-secondary uppercase tracking-wide">
                         Include Spouse
                       </label>
                     </div>
-                    {params.hasSpouse && (
+                    {draft.hasSpouse && (
                       <>
                         <Input
                           label="Spouse Income"
                           type="number"
-                          value={params.spouseIncome}
-                          onChange={e => setParams(p => ({ ...p, spouseIncome: e.target.value }))}
+                          value={draft.spouseIncome}
+                          onChange={e => updateDraft(p => ({ ...p, spouseIncome: e.target.value }))}
                         />
                         <Input
                           label="Spouse Portfolio"
                           type="number"
-                          value={params.spousePortfolio}
-                          onChange={e => setParams(p => ({ ...p, spousePortfolio: e.target.value }))}
+                          value={draft.spousePortfolio}
+                          onChange={e => updateDraft(p => ({ ...p, spousePortfolio: e.target.value }))}
                         />
                       </>
                     )}
@@ -389,18 +459,18 @@ export function Fire() {
                   <div className="space-y-3">
                     <Select
                       label="CPP Start Age"
-                      value={String(params.cppStartAge)}
-                      onChange={e => setParams(p => ({ ...p, cppStartAge: parseInt(e.target.value) }))}
+                      value={String(draft.cppStartAge)}
+                      onChange={e => updateDraft(p => ({ ...p, cppStartAge: parseInt(e.target.value) }))}
                       options={generateOptions(60, 70)}
                     />
                     <Select
                       label="OAS Start Age"
-                      value={String(params.oasStartAge)}
-                      onChange={e => setParams(p => ({ ...p, oasStartAge: parseInt(e.target.value) }))}
+                      value={String(draft.oasStartAge)}
+                      onChange={e => updateDraft(p => ({ ...p, oasStartAge: parseInt(e.target.value) }))}
                       options={generateOptions(65, 70)}
                     />
                     {plan.benefitRecommendation && (
-                      <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-2.5 text-[11px] text-text-secondary leading-relaxed">
+                      <div className="border border-border p-2.5 text-[10px] text-text-secondary leading-relaxed">
                         Recommended: CPP at {plan.benefitRecommendation.recommendedCppAge}, OAS at {plan.benefitRecommendation.recommendedOasAge}
                       </div>
                     )}
@@ -413,10 +483,46 @@ export function Fire() {
                   <div className="space-y-3">
                     <Select
                       label="Withdrawal Start Age"
-                      value={String(params.rrspStartAge)}
-                      onChange={e => setParams(p => ({ ...p, rrspStartAge: parseInt(e.target.value) }))}
+                      value={String(draft.rrspStartAge)}
+                      onChange={e => updateDraft(p => ({ ...p, rrspStartAge: parseInt(e.target.value) }))}
                       options={rrspStartOptions}
                     />
+                  </div>
+                </div>
+
+                {/* Registered Accounts */}
+                <div>
+                  <h3 className={sectionHeading}>Registered Accounts</h3>
+                  <div className="space-y-3">
+                    <Input
+                      label="TFSA Cumulative Contributions"
+                      type="number"
+                      value={draft.tfsaCumulativeContributions}
+                      onChange={e => updateDraft(p => ({ ...p, tfsaCumulativeContributions: e.target.value }))}
+                      placeholder="e.g., 75000"
+                    />
+                    <Input
+                      label="RRSP Cumulative Contributions"
+                      type="number"
+                      value={draft.rrspCumulativeContributions}
+                      onChange={e => updateDraft(p => ({ ...p, rrspCumulativeContributions: e.target.value }))}
+                      placeholder="e.g., 50000"
+                    />
+                    <Input
+                      label="FHSA Cumulative Contributions"
+                      type="number"
+                      value={draft.fhsaCumulativeContributions}
+                      onChange={e => updateDraft(p => ({ ...p, fhsaCumulativeContributions: e.target.value }))}
+                      placeholder="e.g., 8000"
+                    />
+                    <label className="flex items-center gap-2 text-[11px] uppercase tracking-wide">
+                      <input
+                        type="checkbox"
+                        checked={draft.fhsaFirstHomeOwner}
+                        onChange={e => updateDraft(p => ({ ...p, fhsaFirstHomeOwner: e.target.checked }))}
+                      />
+                      First-time home buyer (FHSA eligible)
+                    </label>
                   </div>
                 </div>
 
@@ -433,12 +539,12 @@ export function Fire() {
                         min="0.03"
                         max="0.05"
                         step="0.005"
-                        value={params.withdrawalRate}
-                        onChange={e => setParams(p => ({ ...p, withdrawalRate: e.target.value }))}
+                        value={draft.withdrawalRate}
+                        onChange={e => updateDraft(p => ({ ...p, withdrawalRate: e.target.value }))}
                         className="w-full mt-1"
                       />
                       <span className="text-[11px] text-text-secondary">
-                        {(parseFloat(params.withdrawalRate) * 100).toFixed(1)}%
+                        {(parseFloat(draft.withdrawalRate) * 100).toFixed(1)}%
                       </span>
                     </div>
                     <div>
@@ -450,15 +556,30 @@ export function Fire() {
                         min="0.01"
                         max="0.05"
                         step="0.005"
-                        value={params.inflationRate}
-                        onChange={e => setParams(p => ({ ...p, inflationRate: e.target.value }))}
+                        value={draft.inflationRate}
+                        onChange={e => updateDraft(p => ({ ...p, inflationRate: e.target.value }))}
                         className="w-full mt-1"
                       />
                       <span className="text-[11px] text-text-secondary">
-                        {(parseFloat(params.inflationRate) * 100).toFixed(1)}%
+                        {(parseFloat(draft.inflationRate) * 100).toFixed(1)}%
                       </span>
                     </div>
                   </div>
+                </div>
+
+                {/* Calculate Button */}
+                <div className="sm:col-span-2 lg:col-span-3 pt-2">
+                  <button
+                    onClick={handleCalculate}
+                    disabled={!isDirty}
+                    className={`w-full py-2.5 text-[11px] font-semibold uppercase tracking-widest transition-all ${
+                      isDirty
+                        ? 'bg-text text-surface hover:opacity-90'
+                        : 'bg-border text-text-secondary cursor-not-allowed'
+                    }`}
+                  >
+                    {isDirty ? 'Calculate' : 'Up to date'}
+                  </button>
                 </div>
               </div>
             )}
@@ -473,13 +594,16 @@ export function Fire() {
 
           {/* ── All FIRE Milestones grid ── */}
           <div>
-            <h2 className="font-serif text-lg mb-3">All FIRE Milestones</h2>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              {plan.fireTypes.map(result => {
+            <h2 className="text-[11px] font-semibold uppercase tracking-widest mb-3">All FIRE Milestones</h2>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-0 border border-border divide-x divide-border">
+              {FIRE_ORDER.map(type => plan.fireTypes.find(t => t.type === type)!).map(result => {
                 const cfg = FIRE_CONFIG[result.type as keyof typeof FIRE_CONFIG]
                 const isNext = result.type === nextMilestone.type
                 const isAchieved = result.progress >= 1
                 const estimatedAge = result.yearsToFire !== null ? currentAge + result.yearsToFire : null
+                const handleClick = () => setSelectedFireType(
+                  selectedFireType === result.type ? null : result.type
+                )
 
                 if (result.type === 'barista') {
                   return (
@@ -489,10 +613,12 @@ export function Fire() {
                       progress={0}
                       target={result.effectiveNumber.toString()}
                       estimatedAge={null}
-                      color={cfg.color}
-                      bgColor={cfg.bg}
+                      color={fireColor(false)}
+                      bgColor={fireBg(false)}
                       isBaristaType
                       baristaLabel="income needed/yr"
+                      isSelected={selectedFireType === result.type}
+                      onClick={handleClick}
                     />
                   )
                 }
@@ -504,14 +630,68 @@ export function Fire() {
                     progress={result.progress}
                     target={result.effectiveNumber.toString()}
                     estimatedAge={estimatedAge}
-                    color={cfg.color}
-                    bgColor={cfg.bg}
+                    color={fireColor(isAchieved)}
+                    bgColor={fireBg(isAchieved)}
                     isNext={isNext}
                     isAchieved={isAchieved}
+                    isSelected={selectedFireType === result.type}
+                    onClick={handleClick}
                   />
                 )
               })}
             </div>
+
+            {/* ── Expanded detail breakdown ── */}
+            {selectedFireType && (() => {
+              const result = plan.fireTypes.find(t => t.type === selectedFireType)
+              if (!result) return null
+              const cfg = FIRE_CONFIG[result.type as keyof typeof FIRE_CONFIG]
+              const isAchieved = result.progress >= 1
+              const regularTarget = plan.fireTypes.find(t => t.type === 'regular')
+              const wr = parseFloat(params.withdrawalRate) || 0.04
+
+              // Map FIRE type to the spending level & portfolio for income breakdown
+              const spendingByType: Record<string, number> = {
+                lean: parseFloat(params.leanExpenses) || 0,
+                regular: parseFloat(params.postFireSpending) || 0,
+                fat: parseFloat(params.fatExpenses) || 0,
+                coast: parseFloat(params.postFireSpending) || 0,
+                barista: parseFloat(params.postFireSpending) || 0,
+              }
+              // For coast, the portfolio at retirement is the regular target (what it grows to)
+              const portfolioByType: Record<string, number> = {
+                lean: plan.fireTypes.find(t => t.type === 'lean')?.effectiveNumber.toNumber() || 0,
+                regular: regularTarget?.effectiveNumber.toNumber() || 0,
+                fat: plan.fireTypes.find(t => t.type === 'fat')?.effectiveNumber.toNumber() || 0,
+                coast: regularTarget?.effectiveNumber.toNumber() || 0,
+                barista: regularTarget?.effectiveNumber.toNumber() || 0,
+              }
+
+              const incomeBreakdown: IncomeBreakdownData = {
+                monthlyCpp: govtBenefits.monthlyCpp,
+                monthlyOas: govtBenefits.monthlyOas,
+                withdrawalRate: wr,
+                annualSpending: spendingByType[result.type] ?? 0,
+                portfolioAtRetirement: portfolioByType[result.type] ?? 0,
+              }
+
+              return (
+                <div className="mt-3">
+                  <FireDetailBreakdown
+                    type={result.type}
+                    label={cfg.label}
+                    color={fireColor(isAchieved)}
+                    bgColor={fireBg(isAchieved)}
+                    currentPortfolio={currentTotal}
+                    targetNumber={result.effectiveNumber.toString()}
+                    progress={result.progress}
+                    yearsToFire={result.yearsToFire}
+                    requiredAtRetirement={result.type === 'coast' ? regularTarget?.effectiveNumber.toString() : undefined}
+                    incomeBreakdown={incomeBreakdown}
+                  />
+                </div>
+              )
+            })()}
           </div>
 
           {/* ── Milestone Timeline ── */}
@@ -521,192 +701,44 @@ export function Fire() {
               <CardDescription>When you are projected to reach each FIRE milestone</CardDescription>
             </CardHeader>
             <MilestoneTimeline
-              milestones={plan.fireTypes
-                .filter(t => t.type !== 'barista')
+              milestones={FIRE_ORDER
+                .filter(type => type !== 'barista')
+                .map(type => plan.fireTypes.find(t => t.type === type)!)
                 .map(t => ({
                   name: FIRE_CONFIG[t.type as keyof typeof FIRE_CONFIG]?.label ?? t.type,
                   age: t.yearsToFire !== null ? currentAge + t.yearsToFire : null,
-                  color: FIRE_CONFIG[t.type as keyof typeof FIRE_CONFIG]?.color ?? '#6b7280',
+                  color: fireColor(t.progress >= 1),
                   progress: t.progress,
                 }))}
               currentAge={currentAge}
             />
           </Card>
 
-          {/* ── Net Worth Projection & Monte Carlo ── */}
-          <ProjectionChart
-            accounts={accounts}
-            assumptions={assumptions}
-            currentAge={currentAge}
-            lifeEvents={lifeEvents}
-          />
 
-          {/* ── Withdrawal Plan ── */}
+          {/* ── Yearly Breakdown ── */}
           <Card>
             <CardHeader>
-              <CardTitle>Tax-Optimal Withdrawal Plan</CardTitle>
-              <CardDescription>Account balances and tax impact over retirement</CardDescription>
+              <CardTitle>Portfolio Growth Projection</CardTitle>
+              <CardDescription>Year-by-year breakdown from now to retirement</CardDescription>
             </CardHeader>
-            <WithdrawalPlanView plan={withdrawalPlan} accounts={accounts} />
+            <YearlyBreakdown
+              currentAge={currentAge}
+              retirementAge={params.targetFireAge}
+              currentPortfolio={totalAssets}
+              annualContributions={new Decimal(params.annualSavings || '0')}
+              expectedReturnRate={weightedReturnRate}
+              inflationRate={new Decimal(params.inflationRate || '0.02')}
+              fireTargets={plan.fireTypes.map(t => ({
+                type: t.type,
+                label: FIRE_CONFIG[t.type as keyof typeof FIRE_CONFIG]?.label ?? t.type,
+                effectiveNumber: t.effectiveNumber,
+              }))}
+            />
           </Card>
 
           {/* ── Life Events ── */}
           <LifeEventsSection lifeEvents={lifeEvents} />
 
-          {/* ── CPP/OAS Recommendations ── */}
-          {plan.benefitRecommendation && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Benefit Recommendation</CardTitle>
-                </CardHeader>
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3 text-[13px]">
-                    <div className="flex justify-between">
-                      <span className="text-text-secondary">CPP Age</span>
-                      <span className="font-semibold">{plan.benefitRecommendation.recommendedCppAge}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-text-secondary">OAS Age</span>
-                      <span className="font-semibold">{plan.benefitRecommendation.recommendedOasAge}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-text-secondary">CPP Monthly</span>
-                      <span className="font-semibold">{formatCurrency(plan.benefitRecommendation.monthlyAtRecommended.toString())}/mo</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-text-secondary">CPP at 65</span>
-                      <span className="font-medium">{formatCurrency(plan.benefitRecommendation.monthlyAt65.toString())}/mo</span>
-                    </div>
-                    <div className="flex justify-between col-span-2">
-                      <span className="text-text-secondary">CPP Break-Even</span>
-                      <span className="font-medium">Age {plan.benefitRecommendation.cppBreakEvenAge}</span>
-                    </div>
-                  </div>
-                  <p className="text-[12px] text-text-secondary leading-relaxed">
-                    {plan.benefitRecommendation.reasoning}
-                  </p>
-                </div>
-              </Card>
-
-              <div className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>CPP Estimates</CardTitle>
-                    <CardDescription>Monthly benefit by claim age</CardDescription>
-                  </CardHeader>
-                  <div className="space-y-1.5">
-                    {cppEstimates.filter((_, i) => i % 2 === 0 || i === cppEstimates.length - 1).map(est => (
-                      <div key={est.claimAge} className="flex justify-between text-[13px]">
-                        <span className="text-text-secondary">Age {est.claimAge}</span>
-                        <span className="font-medium">{formatCurrency(est.monthlyBenefit.toString())}/mo</span>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>OAS Estimate</CardTitle>
-                    <CardDescription>At age 65 with current income</CardDescription>
-                  </CardHeader>
-                  <div className="space-y-1.5 text-[13px]">
-                    <div className="flex justify-between">
-                      <span className="text-text-secondary">Gross Monthly</span>
-                      <span className="font-medium">{formatCurrency(oasEstimate.grossMonthlyBenefit.toString())}/mo</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-text-secondary">Clawback</span>
-                      <span className="font-medium text-danger">-{formatCurrency(oasEstimate.clawbackAmount.toString())}/mo</span>
-                    </div>
-                    <div className="flex justify-between border-t border-border pt-2">
-                      <span className="font-medium">Net Monthly</span>
-                      <span className="font-semibold text-primary">{formatCurrency(oasEstimate.netMonthlyBenefit.toString())}/mo</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-text-secondary">Net Annual</span>
-                      <span className="font-medium">{formatCurrency(oasEstimate.netAnnualBenefit.toString())}/yr</span>
-                    </div>
-                  </div>
-                </Card>
-              </div>
-            </div>
-          )}
-
-          {/* ── RRSP Meltdown Strategy ── */}
-          <Card>
-            <CardHeader>
-              <CardTitle>RRSP Meltdown Strategy</CardTitle>
-              <CardDescription>Early withdrawal vs deferred to age 71</CardDescription>
-            </CardHeader>
-            {rrspBalance.eq(0) ? (
-              <p className="text-[13px] text-text-secondary">No RRSP accounts found</p>
-            ) : (
-              <>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className={`rounded-lg border p-4 ${plan.rrspComparison.recommendEarly ? 'border-primary' : 'border-border'}`}>
-                    <div className="text-[12px] font-semibold uppercase tracking-wide text-text-secondary mb-3">
-                      Early (Age {plan.rrspComparison.early.startAge})
-                      {plan.rrspComparison.recommendEarly && (
-                        <span className="ml-2 text-primary text-[11px] normal-case">Recommended</span>
-                      )}
-                    </div>
-                    <div className="space-y-2 text-[13px]">
-                      <div className="flex justify-between">
-                        <span className="text-text-secondary">Balance at Start</span>
-                        <span className="font-medium">{formatCurrency(plan.rrspComparison.early.balanceAtStart.toString())}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-text-secondary">Annual Withdrawal</span>
-                        <span className="font-medium">{formatCurrency(plan.rrspComparison.early.annualWithdrawal.toString())}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-text-secondary">Marginal Tax Rate</span>
-                        <span className="font-medium">{plan.rrspComparison.early.marginalTaxRate.times(100).toFixed(1)}%</span>
-                      </div>
-                      <div className="flex justify-between border-t border-border pt-2">
-                        <span className="font-medium">Total After-Tax</span>
-                        <span className="font-semibold">{formatCurrency(plan.rrspComparison.early.totalAfterTaxIncome.toString())}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className={`rounded-lg border p-4 ${!plan.rrspComparison.recommendEarly ? 'border-primary' : 'border-border'}`}>
-                    <div className="text-[12px] font-semibold uppercase tracking-wide text-text-secondary mb-3">
-                      Deferred (Age {plan.rrspComparison.deferred.startAge})
-                      {!plan.rrspComparison.recommendEarly && (
-                        <span className="ml-2 text-primary text-[11px] normal-case">Recommended</span>
-                      )}
-                    </div>
-                    <div className="space-y-2 text-[13px]">
-                      <div className="flex justify-between">
-                        <span className="text-text-secondary">Balance at Start</span>
-                        <span className="font-medium">{formatCurrency(plan.rrspComparison.deferred.balanceAtStart.toString())}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-text-secondary">Annual Withdrawal</span>
-                        <span className="font-medium">{formatCurrency(plan.rrspComparison.deferred.annualWithdrawal.toString())}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-text-secondary">Marginal Tax Rate</span>
-                        <span className="font-medium">{plan.rrspComparison.deferred.marginalTaxRate.times(100).toFixed(1)}%</span>
-                      </div>
-                      <div className="flex justify-between border-t border-border pt-2">
-                        <span className="font-medium">Total After-Tax</span>
-                        <span className="font-semibold">{formatCurrency(plan.rrspComparison.deferred.totalAfterTaxIncome.toString())}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                {plan.rrspComparison.oasClawbackWarning && (
-                  <div className="mt-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-2.5 text-[11px] text-amber-700 dark:text-amber-300">
-                    <AlertTriangle className="w-3 h-3 inline mr-1" />
-                    Deferred RRSP withdrawals may trigger OAS clawback due to high annual income.
-                  </div>
-                )}
-              </>
-            )}
-          </Card>
         </div>
       )}
     </div>
