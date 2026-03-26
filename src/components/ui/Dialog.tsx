@@ -29,15 +29,15 @@ export function Dialog({ open, onClose, title, children, className }: DialogProp
       ref={dialogRef}
       onClose={onClose}
       className={cn(
-        'm-auto rounded-xl border border-border p-0 max-w-lg w-full bg-surface',
+        'm-auto border border-border p-0 max-w-lg w-full bg-surface',
         className
       )}
     >
       <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-        <h2 className="font-serif text-lg text-text">{title}</h2>
+        <h2 className="text-[12px] font-semibold text-text uppercase tracking-widest">{title}</h2>
         <button
           onClick={onClose}
-          className="p-1 rounded-md text-text-secondary hover:bg-surface-alt transition-colors cursor-pointer"
+          className="p-1 text-text-secondary hover:text-text transition-colors cursor-pointer"
         >
           <X className="w-4 h-4" />
         </button>

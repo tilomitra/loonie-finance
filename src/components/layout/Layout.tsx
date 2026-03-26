@@ -10,7 +10,9 @@ export function Layout() {
     <div className="flex flex-col h-screen">
       <TopBar onOpenAccounts={() => setDrawerOpen(true)} />
       <main className="flex-1 overflow-auto px-6 py-6 lg:px-10 lg:py-8 bg-background">
-        <Outlet />
+        <div className="max-w-5xl mx-auto">
+          <Outlet />
+        </div>
       </main>
       <AccountsDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </div>

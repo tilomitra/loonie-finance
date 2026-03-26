@@ -114,12 +114,12 @@ export function ImportExport() {
 
   return (
     <div className="max-w-2xl">
-      <h1 className="font-serif text-2xl mb-8">Import / Export</h1>
+      <h1 className="text-[14px] font-bold uppercase tracking-widest mb-8">Import / Export</h1>
 
       {status && (
         <div className={`mb-6 p-4 rounded-lg border text-[13px] ${
           status.type === 'success'
-            ? 'bg-primary/5 border-primary/15 text-primary'
+            ? 'bg-accent/5 border-accent/15 text-accent'
             : 'bg-danger/5 border-danger/15 text-danger'
         }`}>
           {status.message}

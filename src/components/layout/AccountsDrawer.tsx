@@ -145,7 +145,7 @@ export function AccountsDrawer({ open, onClose }: AccountsDrawerProps) {
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
-          <h2 className="font-serif text-lg font-bold text-text">Accounts</h2>
+          <h2 className="text-[12px] font-bold uppercase tracking-widest text-text">Accounts</h2>
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg text-text-secondary hover:bg-surface-alt hover:text-text transition-colors cursor-pointer"
@@ -246,7 +246,7 @@ export function AccountsDrawer({ open, onClose }: AccountsDrawerProps) {
           </div>
           <div className="flex justify-between text-[13px] pt-1 border-t border-border">
             <span className="font-semibold text-text">Net Worth</span>
-            <span className={`font-semibold ${netWorth.gte(0) ? 'text-primary' : 'text-danger'}`}>
+            <span className={`font-semibold ${netWorth.gte(0) ? 'text-accent' : 'text-danger'}`}>
               {formatCurrency(netWorth.toString())}
             </span>
           </div>
@@ -293,7 +293,7 @@ function AccountGroup({
         <h3 className="text-[11px] uppercase tracking-widest text-text-secondary font-medium">{title}</h3>
         <button
           onClick={onAddClick}
-          className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 transition-colors cursor-pointer"
+          className="flex items-center gap-1 text-[11px] text-accent hover:text-accent/80 transition-colors cursor-pointer"
         >
           <Plus className="w-3 h-3" />
           Add
@@ -369,7 +369,7 @@ function AccountRow({
             : account.expectedReturnRate && <span>{account.expectedReturnRate}% return</span>
           }
           {isRegisteredType(account.type) && account.contributionRoom && (
-            <span className="ml-1 text-primary">Room: {formatCurrency(account.contributionRoom)}</span>
+            <span className="ml-1 text-accent">Room: {formatCurrency(account.contributionRoom)}</span>
           )}
         </div>
       </div>
@@ -387,11 +387,11 @@ function AccountRow({
                 if (e.key === 'Escape') onCancelEditBalance()
               }}
               autoFocus
-              className="w-24 text-right text-[12px] border border-primary rounded px-1.5 py-0.5 bg-surface text-text focus:outline-none"
+              className="w-24 text-right text-[12px] border border-accent rounded px-1.5 py-0.5 bg-surface text-text focus:outline-none"
             />
             <button
               onClick={() => onSaveEditBalance(account.id)}
-              className="text-[11px] text-primary hover:text-primary/80 font-medium cursor-pointer"
+              className="text-[11px] text-accent hover:text-accent/80 font-medium cursor-pointer"
             >
               Save
             </button>
@@ -409,7 +409,7 @@ function AccountRow({
               className="text-[13px] font-semibold cursor-pointer hover:opacity-70 transition-opacity"
               title="Click to edit balance"
             >
-              <span className={isDebt ? 'text-danger' : 'text-primary'}>
+              <span className={isDebt ? 'text-danger' : 'text-accent'}>
                 {isDebt ? '-' : ''}{formatCurrency(account.balance)}
               </span>
             </button>

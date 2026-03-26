@@ -1,29 +1,33 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #2D5A27;
-  --color-primary-light: #4A7C44;
-  --color-primary-dark: #1E3D1A;
-  --color-accent: #2D5A27;
-  --color-accent-light: #4A7C44;
-  --color-danger: #B91C1C;
-  --color-warning: #B45309;
+  --color-primary: #1A1A1A;
+  --color-primary-light: #333333;
+  --color-primary-dark: #000000;
+  --color-accent: #E8680C;
+  --color-accent-light: #F28C38;
+  --color-achieved: #6B8F71;
+  --color-achieved-light: #8AAF8F;
+  --color-danger: #DC2626;
+  --color-warning: #D97706;
   --color-surface: #FFFFFF;
-  --color-surface-alt: #F7F7F5;
-  --color-border: #E8E8E4;
+  --color-surface-alt: #FAFAFA;
+  --color-border: #E5E5E5;
   --color-text: #1A1A1A;
-  --color-text-secondary: #878787;
-  --color-sidebar: #F7F7F5;
+  --color-text-secondary: #8A8A8A;
+  --color-sidebar: #FAFAFA;
   --color-sidebar-text: #1A1A1A;
-  --color-sidebar-hover: #EEEEEB;
-  --font-serif: 'Instrument Serif', Georgia, serif;
-  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --color-sidebar-hover: #F0F0F0;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
+  --font-sans: 'JetBrains Mono', ui-monospace, monospace;
+  --font-serif: 'JetBrains Mono', ui-monospace, monospace;
 }
 
 body {
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
+  font-size: 13px;
   color: var(--color-text);
-  background: var(--color-surface-alt);
+  background: var(--color-surface);
   margin: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -39,16 +43,16 @@ input[type="range"] {
   appearance: none;
   height: 2px;
   background: var(--color-border);
-  border-radius: 1px;
+  border-radius: 0;
   outline: none;
 }
 
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
-  background: var(--color-primary);
-  border-radius: 50%;
+  width: 12px;
+  height: 12px;
+  background: var(--color-accent);
+  border-radius: 0;
   cursor: pointer;
   transition: transform 0.15s ease;
 }
@@ -58,10 +62,10 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 input[type="range"]::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  background: var(--color-primary);
-  border-radius: 50%;
+  width: 12px;
+  height: 12px;
+  background: var(--color-accent);
+  border-radius: 0;
   cursor: pointer;
   border: none;
 }
@@ -77,7 +81,7 @@ input[type="range"]::-moz-range-thumb {
 
 ::-webkit-scrollbar-thumb {
   background: var(--color-border);
-  border-radius: 3px;
+  border-radius: 0;
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -86,6 +90,6 @@ input[type="range"]::-moz-range-thumb {
 
 /* Dialog backdrop */
 dialog::backdrop {
-  background: rgba(26, 26, 26, 0.4);
-  backdrop-filter: blur(4px);
+  background: rgba(10, 10, 10, 0.4);
+  backdrop-filter: blur(2px);
 }

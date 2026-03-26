@@ -106,7 +106,7 @@ function OnboardingChatInput({ onSend, disabled }: ChatInputProps) {
           className={cn(
             'flex-1 resize-none bg-surface border border-border rounded-xl px-4 py-3 text-[14px] text-text',
             'placeholder:text-text-secondary/50',
-            'focus:outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/40',
+            'focus:outline-none focus:ring-2 focus:ring-accent/15 focus:border-accent/40',
             'disabled:opacity-50'
           )}
         />
@@ -116,7 +116,7 @@ function OnboardingChatInput({ onSend, disabled }: ChatInputProps) {
           className={cn(
             'shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-colors',
             value.trim() && !disabled
-              ? 'bg-primary text-white hover:bg-primary/90'
+              ? 'bg-text text-white hover:bg-text/90'
               : 'bg-surface-hover text-text-secondary'
           )}
         >
@@ -182,7 +182,7 @@ function PreviewPanel({ result, isStreaming, isReviewing, onUpdate }: PreviewPan
   return (
     <div className="flex flex-col h-full overflow-y-auto p-6 space-y-4">
       <div>
-        <h2 className="font-serif text-lg text-text">Building Your Plan...</h2>
+        <h2 className="text-[13px] font-semibold uppercase tracking-widest text-text">Building Your Plan...</h2>
         <p className="text-[12px] text-text-secondary mt-0.5">
           {isReviewing ? 'Review and edit before saving.' : 'Filling in as we chat.'}
         </p>
@@ -441,7 +441,7 @@ export function Onboarding() {
           <div className="w-14 h-14 rounded-full bg-purple-100 flex items-center justify-center mx-auto mb-4">
             <span className="text-purple-700 font-bold text-lg">AI</span>
           </div>
-          <h2 className="font-serif text-xl mb-2">Set up your API key first</h2>
+          <h2 className="text-[13px] font-semibold uppercase tracking-widest mb-2">Set up your API key first</h2>
           <p className="text-[13px] text-text-secondary mb-6">
             The AI onboarding uses OpenAI to have a conversation with you and build your financial profile.
             Add your OpenAI API key in Settings to get started.
@@ -467,7 +467,7 @@ export function Onboarding() {
         <div className="px-6 py-4 border-b border-border shrink-0">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="font-serif text-lg">Set Up Your Financial Plan</h1>
+              <h1 className="text-[13px] font-semibold uppercase tracking-widest">Set Up Your Financial Plan</h1>
               <p className="text-[12px] text-text-secondary mt-0.5">
                 Answer a few questions to get personalized projections
               </p>
@@ -490,7 +490,7 @@ export function Onboarding() {
                 <div className={cn(
                   'text-[11px] px-2 py-0.5 rounded-full font-medium transition-colors',
                   i === 0
-                    ? 'bg-primary/10 text-primary'
+                    ? 'bg-text/10 text-accent'
                     : 'text-text-secondary'
                 )}>
                   {step}

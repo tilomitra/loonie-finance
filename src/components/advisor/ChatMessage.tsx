@@ -18,7 +18,7 @@ export function ChatMessage({ role, content, isStreaming }: ChatMessageProps) {
   if (role === 'user') {
     return (
       <div className="flex justify-end">
-        <div className="bg-primary text-white px-4 py-2.5 rounded-2xl rounded-br-sm max-w-[70%] text-[14px] leading-relaxed">
+        <div className="bg-text text-white px-4 py-2.5 rounded-2xl rounded-br-sm max-w-[70%] text-[14px] leading-relaxed">
           {content}
         </div>
       </div>

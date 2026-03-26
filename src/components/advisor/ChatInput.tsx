@@ -50,7 +50,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
           className={cn(
             'flex-1 resize-none bg-surface border border-border rounded-xl px-4 py-3 text-[14px] text-text',
             'placeholder:text-text-secondary/50',
-            'focus:outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/40',
+            'focus:outline-none focus:ring-2 focus:ring-accent/15 focus:border-accent/40',
             'disabled:opacity-50'
           )}
         />
@@ -60,7 +60,7 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
           className={cn(
             'shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-colors',
             value.trim() && !disabled
-              ? 'bg-primary text-white hover:bg-primary/90'
+              ? 'bg-text text-white hover:bg-text/90'
               : 'bg-surface-hover text-text-secondary'
           )}
         >
