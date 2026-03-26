@@ -18,7 +18,7 @@ export function MilestoneTimeline({ milestones, currentAge }: MilestoneTimelineP
 
   if (reachable.length === 0) {
     return (
-      <div className="text-center py-4 text-[13px] text-text-secondary">
+      <div className="text-center py-4 text-[12px] text-text-secondary">
         Set up your FIRE parameters to see your milestone timeline.
       </div>
     )
@@ -35,21 +35,21 @@ export function MilestoneTimeline({ milestones, currentAge }: MilestoneTimelineP
   return (
     <div className="relative pt-6 pb-10">
       {/* Track line */}
-      <div className="relative h-1 bg-border rounded-full mx-4">
+      <div className="relative h-[2px] bg-border mx-4">
         {/* Progress fill up to current age */}
         <div
-          className="absolute top-0 left-0 h-full bg-border/60 rounded-full"
+          className="absolute top-0 left-0 h-full bg-text"
           style={{ width: `${currentPct}%` }}
         />
 
         {/* Current age marker */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-text border-2 border-surface z-10"
+          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-text border-2 border-surface z-10"
           style={{ left: `${currentPct}%` }}
           title={`Now (Age ${currentAge})`}
         />
         <div
-          className="absolute top-4 -translate-x-1/2 text-[10px] text-text-secondary font-medium whitespace-nowrap"
+          className="absolute top-3 -translate-x-1/2 text-[10px] text-text-secondary font-medium whitespace-nowrap uppercase tracking-wide"
           style={{ left: `${currentPct}%` }}
         >
           Now ({currentAge})
@@ -63,24 +63,23 @@ export function MilestoneTimeline({ milestones, currentAge }: MilestoneTimelineP
             <div key={m.name}>
               {/* Dot */}
               <div
-                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-2 border-surface z-10 transition-all"
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-3 h-3 border-2 border-surface z-10 transition-all"
                 style={{
                   left: `${pct}%`,
-                  backgroundColor: m.color,
-                  opacity: isAchieved ? 1 : 0.65,
+                  backgroundColor: isAchieved ? '#E8680C' : '#8A8A8A',
                 }}
                 title={`${m.name} FIRE at age ${m.age}`}
               />
 
               {/* Label below */}
               <div
-                className="absolute top-5 -translate-x-1/2 text-center"
+                className="absolute top-4 -translate-x-1/2 text-center"
                 style={{ left: `${pct}%` }}
               >
-                <div className="text-[10px] font-semibold capitalize whitespace-nowrap" style={{ color: m.color }}>
+                <div className={`text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap ${isAchieved ? 'text-accent' : 'text-text-secondary'}`}>
                   {m.name}
                 </div>
-                <div className="text-[10px] text-text-secondary whitespace-nowrap">
+                <div className="text-[10px] text-text-secondary whitespace-nowrap tabular-nums">
                   Age {m.age}
                 </div>
               </div>

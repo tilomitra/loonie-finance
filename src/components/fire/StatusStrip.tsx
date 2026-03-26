@@ -17,11 +17,11 @@ interface StatCardProps {
 
 function StatCard({ label, value, valueClassName }: StatCardProps) {
   return (
-    <div className="flex-1 bg-surface rounded-lg border border-border py-3 px-4">
-      <div className="text-[11px] font-medium text-text-secondary uppercase tracking-wide mb-1">
+    <div className="flex-1 border border-border py-3 px-4">
+      <div className="text-[10px] font-medium text-text-secondary uppercase tracking-widest mb-1">
         {label}
       </div>
-      <div className={`text-[17px] font-semibold tracking-tight ${valueClassName ?? 'text-text'}`}>
+      <div className={`text-[15px] font-semibold tabular-nums ${valueClassName ?? 'text-text'}`}>
         {value}
       </div>
     </div>
@@ -36,7 +36,7 @@ export function StatusStrip({
 }: StatusStripProps) {
   const netWorthNum = parseFloat(netWorth)
   const netWorthFormatted = formatCurrency(netWorth)
-  const netWorthColor = netWorthNum < 0 ? 'text-danger' : 'text-primary'
+  const netWorthColor = netWorthNum < 0 ? 'text-danger' : 'text-text'
 
   const savingsRateDisplay =
     savingsRate !== null ? `${savingsRate.toFixed(1)}%` : '—'
@@ -45,7 +45,7 @@ export function StatusStrip({
     yearsToFire !== null ? `${Math.round(yearsToFire)} yrs` : '—'
 
   return (
-    <div className="flex gap-3">
+    <div className="flex gap-0 border border-border divide-x divide-border">
       <StatCard
         label="Net Worth"
         value={netWorthFormatted}

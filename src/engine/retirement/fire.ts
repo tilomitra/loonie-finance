@@ -51,7 +51,7 @@ export function calculateYearsToFire(
   // Iterative calculation: each year, grow existing + add savings
   let worth = currentNetWorth
   for (let year = 1; year <= 100; year++) {
-    worth = worth.times(realReturnRate.plus(1)).plus(annualSavings)
+    worth = worth.plus(annualSavings).times(realReturnRate.plus(1))
     if (worth.gte(targetNumber)) return year
   }
   return null // Not achievable within 100 years

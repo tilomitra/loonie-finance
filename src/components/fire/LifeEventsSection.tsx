@@ -17,24 +17,24 @@ interface LifeEventsSectionProps {
 const TYPE_CONFIG = {
   income: {
     label: 'Income',
-    color: 'text-green-700 dark:text-green-400',
-    bg: 'bg-green-50 dark:bg-green-950/30',
-    border: 'border-green-200 dark:border-green-800',
-    dot: 'bg-green-500',
+    color: 'text-text',
+    bg: '',
+    border: 'border-border',
+    dot: 'bg-achieved',
   },
   expense: {
     label: 'Expense',
-    color: 'text-red-700 dark:text-red-400',
-    bg: 'bg-red-50 dark:bg-red-950/30',
-    border: 'border-red-200 dark:border-red-800',
-    dot: 'bg-red-500',
+    color: 'text-text',
+    bg: '',
+    border: 'border-border',
+    dot: 'bg-accent',
   },
   'one-time': {
     label: 'One-time',
-    color: 'text-orange-700 dark:text-orange-400',
-    bg: 'bg-orange-50 dark:bg-orange-950/30',
-    border: 'border-orange-200 dark:border-orange-800',
-    dot: 'bg-orange-500',
+    color: 'text-text-secondary',
+    bg: '',
+    border: 'border-border',
+    dot: 'bg-text-secondary',
   },
 } as const
 
@@ -109,16 +109,16 @@ export function LifeEventsSection({ lifeEvents }: LifeEventsSectionProps) {
   }
 
   return (
-    <div className="bg-surface rounded-lg border border-border">
+    <div className="bg-surface border border-border">
       {/* Header */}
       <button
         className="w-full flex items-center justify-between p-5"
         onClick={() => setExpanded(v => !v)}
       >
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-[14px]">Life Events</span>
+          <span className="text-[11px] font-semibold uppercase tracking-widest">Life Events</span>
           {lifeEvents.length > 0 && (
-            <span className="text-[11px] bg-surface-alt border border-border rounded-full px-2 py-0.5 text-text-secondary font-medium">
+            <span className="text-[10px] bg-surface-alt border border-border px-2 py-0.5 text-text-secondary font-medium tabular-nums">
               {lifeEvents.length}
             </span>
           )}
@@ -160,7 +160,7 @@ export function LifeEventsSection({ lifeEvents }: LifeEventsSectionProps) {
                 return (
                   <div
                     key={event.id}
-                    className={`rounded-lg border p-3 ${cfg.bg} ${cfg.border} relative`}
+                    className={`border p-3 ${cfg.bg} ${cfg.border} relative`}
                   >
                     {/* Delete button */}
                     <button
