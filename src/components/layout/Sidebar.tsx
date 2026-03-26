@@ -8,6 +8,7 @@ import {
   BotMessageSquare,
   Settings,
   ArrowLeftRight,
+  Sparkles,
 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 import { useNetWorth } from '@/db/hooks'
@@ -19,6 +20,7 @@ const navItems = [
   { to: '/fire', icon: Flame, label: 'FIRE' },
   { to: '/tax', icon: Calculator, label: 'Tax' },
   { to: '/advisor', icon: BotMessageSquare, label: 'AI Advisor' },
+  { to: '/onboarding', icon: Sparkles, label: 'AI Setup' },
   { to: '/settings', icon: Settings, label: 'Settings' },
   { to: '/import-export', icon: ArrowLeftRight, label: 'Import / Export' },
 ]

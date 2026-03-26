@@ -9,6 +9,7 @@ import { Tax } from '@/pages/Tax'
 import { Advisor } from '@/pages/Advisor'
 import { SettingsPage } from '@/pages/Settings'
 import { ImportExport } from '@/pages/ImportExport'
+import { Onboarding } from '@/pages/Onboarding'
 
 export default function App() {
   return (
@@ -22,6 +23,7 @@ export default function App() {
           <Route path="/fire" element={<Fire />} />
           <Route path="/tax" element={<Tax />} />
           <Route path="/advisor" element={<Advisor />} />
+          <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/import-export" element={<ImportExport />} />
         </Route>

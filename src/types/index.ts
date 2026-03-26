@@ -18,6 +18,7 @@ export interface Account {
   contributionRoom: string | null
   interestRate: string | null
   notes: string
+  owner?: 'self' | 'partner' | 'joint'
   createdAt: number
   updatedAt: number
 }
@@ -58,6 +59,28 @@ export interface Scenario {
   updatedAt: number
 }
 
+export interface LifeEvent {
+  id: string
+  name: string
+  type: 'income' | 'expense' | 'one-time'
+  amount: string                        // monthly for streams, total for one-time (decimal string)
+  startAge: number
+  endAge?: number                       // undefined for one-time events
+  person: 'self' | 'partner' | 'joint'
+}
+
+export interface PartnerProfile {
+  name: string
+  dateOfBirth: string                   // YYYY-MM-DD
+  province: Province
+  annualIncome: string
+  yearsContributedCPP: number
+  cppStartAge: number
+  oasStartAge: number
+  tfsaCumulativeContributions: string
+  rrspCumulativeContributions: string
+}
+
 export interface UserProfile {
   id: string // always 'singleton'
   dateOfBirth: string // YYYY-MM-DD
@@ -69,6 +92,7 @@ export interface UserProfile {
   fhsaCumulativeContributions: string
   fhsaFirstHomeOwner: boolean
   openaiApiKey?: string
+  partnerProfile?: PartnerProfile
   createdAt: number
   updatedAt: number
 }
