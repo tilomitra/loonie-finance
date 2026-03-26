@@ -15,6 +15,9 @@ import { ProgressGauge } from '@/components/fire/ProgressGauge'
 import { MilestoneTimeline } from '@/components/fire/MilestoneTimeline'
 import { NextMilestone } from '@/components/fire/NextMilestone'
 import { WithdrawalPlanView } from '@/components/fire/WithdrawalPlanView'
+import { StatusStrip } from '@/components/fire/StatusStrip'
+import { ProjectionChart } from '@/components/fire/ProjectionChart'
+import { LifeEventsSection } from '@/components/fire/LifeEventsSection'
 
 type ViewMode = 'self' | 'partner' | 'household'
 
@@ -66,7 +69,7 @@ export function Fire() {
     return new Date().getFullYear() - new Date(profile.dateOfBirth).getFullYear()
   }, [profile])
 
-  const { netWorth, rrspBalance, weightedReturnRate } = useMemo(() => {
+  const { netWorth, totalAssets, totalDebts, rrspBalance, weightedReturnRate } = useMemo(() => {
     let assets = new Decimal(0)
     let debts = new Decimal(0)
     let rrsp = new Decimal(0)
@@ -90,6 +93,8 @@ export function Fire() {
 
     return {
       netWorth: assets.minus(debts),
+      totalAssets: assets,
+      totalDebts: debts,
       rrspBalance: rrsp,
       weightedReturnRate: totalNonDebtBalance.gt(0)
         ? weightedSum.div(totalNonDebtBalance)
@@ -173,12 +178,48 @@ export function Fire() {
 
   const currentTotal = plan.feasibility.currentTotal.toString()
 
+  // StatusStrip derived values
+  const savingsRate = useMemo(() => {
+    const income = parseFloat(params.annualExpenses) + parseFloat(params.annualSavings || '0')
+    if (income <= 0) return null
+    return (parseFloat(params.annualSavings || '0') / income) * 100
+  }, [params.annualExpenses, params.annualSavings])
+
+  const yearsToFire = useMemo(() => {
+    return plan.fireTypes.find(t => t.type === 'regular')?.yearsToFire ?? null
+  }, [plan])
+
+  const monthlyContributions = useMemo(() => {
+    return new Decimal(params.annualSavings || '0').div(12).toString()
+  }, [params.annualSavings])
+
+  // ScenarioAssumptions for ProjectionChart
+  const assumptions = useMemo(() => {
+    const annualIncome = parseFloat(params.annualExpenses) + parseFloat(params.annualSavings || '0')
+    const annualSavingsRateNum = annualIncome > 0
+      ? parseFloat(params.annualSavings || '0') / annualIncome
+      : 0
+    return {
+      inflationRate: params.inflationRate,
+      salaryGrowthRate: '0.02',
+      retirementAge: params.targetFireAge,
+      lifeExpectancy: params.lifeExpectancy,
+      cppStartAge: params.cppStartAge,
+      oasStartAge: params.oasStartAge,
+      province: (profile?.province || 'ON') as import('@/types').Province,
+      annualIncome: String(annualIncome),
+      annualExpenses: params.annualExpenses,
+      annualSavingsRate: String(annualSavingsRateNum),
+      monthlyContributions: [] as import('@/types').MonthlyContribution[],
+    }
+  }, [params, profile])
+
   const sectionHeading = 'text-[11px] font-semibold text-text-secondary uppercase tracking-wide mb-2'
 
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <h1 className="font-serif text-2xl">FIRE Progress</h1>
 
         {/* View toggle */}
@@ -197,6 +238,18 @@ export function Fire() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Status Strip */}
+      <div className="mb-6">
+        <StatusStrip
+          netWorth={netWorth.toString()}
+          totalAssets={totalAssets.toString()}
+          totalDebts={totalDebts.toString()}
+          savingsRate={savingsRate}
+          yearsToFire={yearsToFire}
+          monthlyContributions={monthlyContributions}
+        />
       </div>
 
       {/* Partner / Household coming soon */}
@@ -480,6 +533,14 @@ export function Fire() {
             />
           </Card>
 
+          {/* ── Net Worth Projection & Monte Carlo ── */}
+          <ProjectionChart
+            accounts={accounts}
+            assumptions={assumptions}
+            currentAge={currentAge}
+            lifeEvents={lifeEvents}
+          />
+
           {/* ── Withdrawal Plan ── */}
           <Card>
             <CardHeader>
@@ -488,6 +549,9 @@ export function Fire() {
             </CardHeader>
             <WithdrawalPlanView plan={withdrawalPlan} accounts={accounts} />
           </Card>
+
+          {/* ── Life Events ── */}
+          <LifeEventsSection lifeEvents={lifeEvents} />
 
           {/* ── CPP/OAS Recommendations ── */}
           {plan.benefitRecommendation && (
