@@ -63,8 +63,8 @@ function saveParams(params: FireParams) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(params))
 }
 
-const ACCENT = '#E8680C'
-const ACHIEVED = '#6B8F71'
+const ACCENT = '#475569'
+const ACHIEVED = '#0D9488'
 
 const FIRE_CONFIG = {
   barista: { label: 'Barista FIRE' },
@@ -79,7 +79,7 @@ function fireColor(achieved: boolean) {
 }
 
 function fireBg(achieved: boolean) {
-  return achieved ? '#6B8F7108' : '#E8680C08'
+  return achieved ? '#0D948808' : '#47556908'
 }
 
 const FIRE_ORDER: (keyof typeof FIRE_CONFIG)[] = ['barista', 'coast', 'lean', 'regular', 'fat']

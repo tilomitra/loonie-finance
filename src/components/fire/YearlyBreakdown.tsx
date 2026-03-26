@@ -199,7 +199,7 @@ export function YearlyBreakdown({
                   <td className="py-1.5 px-3 tabular-nums">{row.year}</td>
                   <td className="py-1.5 px-3 tabular-nums">{row.age}</td>
                   <td className="py-1.5 px-3 text-right tabular-nums">{formatCurrency(row.totalAssets.toString())}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums text-blue-500">{row.totalDebts.gt(0) ? formatCurrency(row.totalDebts.toString()) : '—'}</td>
+                  <td className="py-1.5 px-3 text-right tabular-nums text-accent">{row.totalDebts.gt(0) ? formatCurrency(row.totalDebts.toString()) : '—'}</td>
                   <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatCurrency(row.netWorth.toString())}</td>
                   <td className="py-1.5 px-3 text-right tabular-nums">{formatCurrency(row.fireNumber.toString())}</td>
                   <td className={`py-1.5 px-3 ${isHighlight ? 'text-accent' : ''}`}>{row.status}</td>
