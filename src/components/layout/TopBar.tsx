@@ -14,7 +14,7 @@ export function TopBar({ onOpenAccounts }: TopBarProps) {
     <header className="h-14 bg-sidebar border-b border-border flex items-center px-6 shrink-0">
       {/* Left: Branding */}
       <div className="flex-1">
-        <span className="font-serif text-lg font-bold text-text tracking-tight">Loonie Finance</span>
+        <Link to="/" className="font-serif text-lg font-bold text-text tracking-tight hover:opacity-80 transition-opacity">Loonie Finance</Link>
       </div>
 
       {/* Center: Net Worth */}
