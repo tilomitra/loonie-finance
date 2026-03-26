@@ -1,13 +1,14 @@
 import { useMemo } from 'react'
 import { formatCurrency } from '@/lib/utils'
 import Decimal from 'decimal.js'
+import type { Account } from '@/types'
+import { isDebtType } from '@/types'
 
 interface YearlyBreakdownProps {
   currentAge: number
   retirementAge: number
-  currentPortfolio: Decimal
-  annualContributions: Decimal
-  expectedReturnRate: Decimal // nominal
+  accounts: Account[]
+  annualSavings: Decimal
   inflationRate: Decimal
   fireTargets: {
     type: string
@@ -19,9 +20,9 @@ interface YearlyBreakdownProps {
 interface ProjectionRow {
   year: number
   age: number
-  totalPortfolio: Decimal
-  totalContributions: Decimal
-  growthFromReturns: Decimal
+  totalAssets: Decimal
+  totalDebts: Decimal
+  netWorth: Decimal
   fireNumber: Decimal
   status: string
 }
@@ -29,26 +30,62 @@ interface ProjectionRow {
 export function YearlyBreakdown({
   currentAge,
   retirementAge,
-  currentPortfolio,
-  annualContributions,
-  expectedReturnRate,
+  accounts,
+  annualSavings,
   inflationRate,
   fireTargets,
 }: YearlyBreakdownProps) {
   const regularTarget = fireTargets.find(t => t.type === 'regular')
-  const realReturn = expectedReturnRate.minus(inflationRate)
+
+  // Compute weighted return rate from asset accounts
+  const weightedReturnRate = useMemo(() => {
+    let weightedSum = new Decimal(0)
+    let totalAssetBalance = new Decimal(0)
+    for (const account of accounts) {
+      if (!isDebtType(account.type)) {
+        const bal = new Decimal(account.balance || '0')
+        const rate = new Decimal(account.expectedReturnRate || '0').div(100)
+        weightedSum = weightedSum.plus(bal.times(rate))
+        totalAssetBalance = totalAssetBalance.plus(bal)
+      }
+    }
+    return totalAssetBalance.gt(0) ? weightedSum.div(totalAssetBalance) : new Decimal(0.05)
+  }, [accounts])
+
+  const realReturn = weightedReturnRate.minus(inflationRate)
 
   const projection = useMemo(() => {
     const rows: ProjectionRow[] = []
     const startYear = new Date().getFullYear()
-    let portfolio = currentPortfolio
-    let totalContributions = new Decimal(0)
-    let growthFromReturns = new Decimal(0)
+
+    // Initialize per-account balances
+    const balances: Record<string, Decimal> = {}
+    for (const account of accounts) {
+      balances[account.id] = new Decimal(account.balance || '0')
+    }
+
+    // Distribute annual savings proportionally across asset accounts by balance
+    const assetAccounts = accounts.filter(a => !isDebtType(a.type))
+    const debtAccounts = accounts.filter(a => isDebtType(a.type))
+
     let fireAchievedYear: number | null = null
 
     for (let i = 0; i <= retirementAge - currentAge; i++) {
       const age = currentAge + i
       const year = startYear + i
+
+      // Sum assets and debts from per-account balances
+      let totalAssets = new Decimal(0)
+      let totalDebts = new Decimal(0)
+      for (const account of accounts) {
+        const bal = balances[account.id]
+        if (isDebtType(account.type)) {
+          totalDebts = totalDebts.plus(bal)
+        } else {
+          totalAssets = totalAssets.plus(bal)
+        }
+      }
+      const netWorth = totalAssets.minus(totalDebts)
 
       // FIRE number for this year = target / (1+realReturn)^yearsLeft
       const yearsLeft = retirementAge - age
@@ -56,7 +93,7 @@ export function YearlyBreakdown({
         ? regularTarget.effectiveNumber.div(realReturn.plus(1).pow(yearsLeft))
         : new Decimal(0)
 
-      const isAchieved = portfolio.gte(fireNumber)
+      const isAchieved = netWorth.gte(fireNumber)
       if (isAchieved && fireAchievedYear === null && i > 0) {
         fireAchievedYear = year
       }
@@ -77,23 +114,42 @@ export function YearlyBreakdown({
       rows.push({
         year,
         age,
-        totalPortfolio: portfolio.toDecimalPlaces(0),
-        totalContributions: totalContributions.toDecimalPlaces(0),
-        growthFromReturns: growthFromReturns.toDecimalPlaces(0),
+        totalAssets: totalAssets.toDecimalPlaces(0),
+        totalDebts: totalDebts.toDecimalPlaces(0),
+        netWorth: netWorth.toDecimalPlaces(0),
         fireNumber: fireNumber.toDecimalPlaces(0),
         status,
       })
 
-      // Compute next year: beginning-of-year contributions, full year returns
-      const yearContributions = annualContributions
-      const annualReturn = portfolio.plus(yearContributions).times(realReturn)
-      portfolio = portfolio.plus(yearContributions).plus(annualReturn)
-      totalContributions = totalContributions.plus(yearContributions)
-      growthFromReturns = growthFromReturns.plus(annualReturn)
+      // Advance each account one year
+      // Assets: compound with own return rate
+      const totalAssetBal = assetAccounts.reduce(
+        (sum, a) => sum.plus(balances[a.id]), new Decimal(0)
+      )
+      for (const account of assetAccounts) {
+        const bal = balances[account.id]
+        const returnRate = new Decimal(account.expectedReturnRate || '0').div(100)
+        // Distribute savings proportionally by balance weight
+        const weight = totalAssetBal.gt(0)
+          ? bal.div(totalAssetBal)
+          : new Decimal(1).div(assetAccounts.length || 1)
+        const contrib = annualSavings.times(weight)
+        balances[account.id] = bal.plus(contrib).times(returnRate.plus(1))
+      }
+
+      // Debts: accrue interest, subtract annual payments, floor at zero
+      for (const account of debtAccounts) {
+        const bal = balances[account.id]
+        if (bal.lte(0)) continue
+        const interestRate = new Decimal(account.interestRate || '0').div(100)
+        const interest = bal.times(interestRate)
+        const annualPayment = new Decimal(account.monthlyPayment || '0').times(12)
+        balances[account.id] = Decimal.max(bal.plus(interest).minus(annualPayment), new Decimal(0))
+      }
     }
 
     return rows
-  }, [currentAge, retirementAge, currentPortfolio, annualContributions, realReturn, regularTarget])
+  }, [currentAge, retirementAge, accounts, annualSavings, realReturn, regularTarget])
 
   return (
     <div>
@@ -103,9 +159,9 @@ export function YearlyBreakdown({
             <tr className="border-b border-border">
               <th className="text-left py-2 px-3 font-semibold text-text-secondary text-[10px] uppercase tracking-widest">Year</th>
               <th className="text-left py-2 px-3 font-semibold text-text-secondary text-[10px] uppercase tracking-widest">Age</th>
-              <th className="text-right py-2 px-3 font-semibold text-text-secondary text-[10px] uppercase tracking-widest">Portfolio</th>
-              <th className="text-right py-2 px-3 font-semibold text-text-secondary text-[10px] uppercase tracking-widest">Contributions</th>
-              <th className="text-right py-2 px-3 font-semibold text-text-secondary text-[10px] uppercase tracking-widest">Returns</th>
+              <th className="text-right py-2 px-3 font-semibold text-text-secondary text-[10px] uppercase tracking-widest">Assets</th>
+              <th className="text-right py-2 px-3 font-semibold text-text-secondary text-[10px] uppercase tracking-widest">Debts</th>
+              <th className="text-right py-2 px-3 font-semibold text-text-secondary text-[10px] uppercase tracking-widest">Net Worth</th>
               <th className="text-right py-2 px-3 font-semibold text-text-secondary text-[10px] uppercase tracking-widest">FIRE #</th>
               <th className="text-left py-2 px-3 font-semibold text-text-secondary text-[10px] uppercase tracking-widest">Status</th>
             </tr>
@@ -127,9 +183,9 @@ export function YearlyBreakdown({
                 >
                   <td className="py-1.5 px-3 tabular-nums">{row.year}</td>
                   <td className="py-1.5 px-3 tabular-nums">{row.age}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums">{formatCurrency(row.totalPortfolio.toString())}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums">{formatCurrency(row.totalContributions.toString())}</td>
-                  <td className="py-1.5 px-3 text-right tabular-nums">{formatCurrency(row.growthFromReturns.toString())}</td>
+                  <td className="py-1.5 px-3 text-right tabular-nums">{formatCurrency(row.totalAssets.toString())}</td>
+                  <td className="py-1.5 px-3 text-right tabular-nums text-danger">{row.totalDebts.gt(0) ? formatCurrency(row.totalDebts.toString()) : '—'}</td>
+                  <td className="py-1.5 px-3 text-right tabular-nums font-medium">{formatCurrency(row.netWorth.toString())}</td>
                   <td className="py-1.5 px-3 text-right tabular-nums">{formatCurrency(row.fireNumber.toString())}</td>
                   <td className={`py-1.5 px-3 ${isHighlight ? 'text-accent' : ''}`}>{row.status}</td>
                 </tr>

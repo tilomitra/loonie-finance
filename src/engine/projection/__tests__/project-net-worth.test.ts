@@ -12,6 +12,7 @@ const makeAccount = (overrides: Partial<Account> = {}): Account => ({
   expectedReturnRate: '7.0',
   contributionRoom: null,
   interestRate: null,
+  monthlyPayment: null,
   notes: '',
   createdAt: 0,
   updatedAt: 0,

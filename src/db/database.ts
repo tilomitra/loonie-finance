@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie'
-import type { Account, BalanceHistory, Scenario, UserProfile, Snapshot, LifeEvent } from '@/types'
+import type { Account, BalanceHistory, Scenario, UserProfile, Snapshot } from '@/types'
 import { DEFAULT_RETURN_RATES } from '@/engine/projection/account-defaults'
 import type { AccountType } from '@/types'
 
@@ -9,7 +9,6 @@ export class LoonieDatabase extends Dexie {
   scenarios!: Table<Scenario, string>
   userProfile!: Table<UserProfile, string>
   snapshots!: Table<Snapshot, string>
-  lifeEvents!: Table<LifeEvent, string>
 
   constructor() {
     super('loonie-finance')
@@ -48,6 +47,20 @@ export class LoonieDatabase extends Dexie {
     }).upgrade(tx => {
       return tx.table('accounts').toCollection().modify(account => {
         account.owner = 'self'
+      })
+    })
+
+    // v4: Add monthlyPayment field to accounts
+    this.version(4).stores({
+      accounts: 'id, type, createdAt',
+      balanceHistory: 'id, accountId, date',
+      scenarios: 'id, isDefault',
+      userProfile: 'id',
+      snapshots: 'id, date',
+      lifeEvents: 'id, type, person, startAge',
+    }).upgrade(tx => {
+      return tx.table('accounts').toCollection().modify(account => {
+        account.monthlyPayment = null
       })
     })
   }

@@ -17,6 +17,7 @@ export interface Account {
   expectedReturnRate: string // annual return % as decimal string (e.g., '5.0')
   contributionRoom: string | null
   interestRate: string | null
+  monthlyPayment: string | null // monthly payment for debt accounts
   notes: string
   owner?: 'self' | 'partner' | 'joint'
   createdAt: number
@@ -57,16 +58,6 @@ export interface Scenario {
   assumptions: ScenarioAssumptions
   createdAt: number
   updatedAt: number
-}
-
-export interface LifeEvent {
-  id: string
-  name: string
-  type: 'income' | 'expense' | 'one-time'
-  amount: string                        // monthly for streams, total for one-time (decimal string)
-  startAge: number
-  endAge?: number                       // undefined for one-time events
-  person: 'self' | 'partner' | 'joint'
 }
 
 export interface PartnerProfile {

@@ -17,6 +17,7 @@ function makeAccount(overrides: Partial<Account> & { id: string; type: Account['
     expectedReturnRate: '5.0',
     contributionRoom: null,
     interestRate: null,
+    monthlyPayment: null,
     notes: '',
     owner: 'self',
     createdAt: 0,
@@ -35,7 +36,6 @@ const selfProfile: WithdrawalProfileInput = {
 
 const baseInput = (overrides: Partial<WithdrawalSequenceInput> = {}): WithdrawalSequenceInput => ({
   accounts: [],
-  lifeEvents: [],
   selfProfile,
   retirementAge: 60,
   lifeExpectancy: 65, // short projection for speed

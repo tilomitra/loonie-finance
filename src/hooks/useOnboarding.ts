@@ -133,26 +133,13 @@ export function useOnboarding(apiKey: string | undefined) {
           expectedReturnRate: DEFAULT_RETURN_RATES[acc.type as AccountType] ?? '5.0',
           contributionRoom: null,
           interestRate: null,
+          monthlyPayment: null,
           notes: '',
           owner: (acc.owner ?? 'self') as 'self' | 'partner' | 'joint',
           createdAt: now,
           updatedAt: now,
         }))
         await db.accounts.bulkPut(accountsToSave)
-      }
-
-      // Save life events
-      if (parsedResult.lifeEvents.length > 0) {
-        const eventsToSave = parsedResult.lifeEvents.map(evt => ({
-          id: uuidv4(),
-          name: evt.name,
-          type: evt.type,
-          amount: evt.amount,
-          startAge: evt.startAge,
-          endAge: evt.endAge,
-          person: evt.person,
-        }))
-        await db.lifeEvents.bulkPut(eventsToSave)
       }
 
       setState('done')

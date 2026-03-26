@@ -41,6 +41,7 @@ interface AddAccountForm {
   currency: Currency
   institution: string
   interestRate: string
+  monthlyPayment: string
   expectedReturnRate: string
 }
 
@@ -51,6 +52,7 @@ const emptyForm = (): AddAccountForm => ({
   currency: 'CAD',
   institution: '',
   interestRate: '',
+  monthlyPayment: '',
   expectedReturnRate: DEFAULT_RETURN_RATES['tfsa'],
 })
 
@@ -97,6 +99,7 @@ export function AccountsDrawer({ open, onClose }: AccountsDrawerProps) {
       expectedReturnRate: isDebtType(addForm.type) ? '0' : addForm.expectedReturnRate,
       contributionRoom: null,
       interestRate: isDebtType(addForm.type) ? addForm.interestRate || null : null,
+      monthlyPayment: isDebtType(addForm.type) ? addForm.monthlyPayment || null : null,
       notes: '',
       createdAt: now,
       updatedAt: now,
@@ -365,7 +368,10 @@ function AccountRow({
         <div className="text-[11px] text-text-secondary mt-0.5">
           {account.institution && <span>{account.institution} · </span>}
           {isDebt
-            ? account.interestRate && <span>{account.interestRate}% interest</span>
+            ? <>
+                {account.interestRate && <span>{account.interestRate}% interest</span>}
+                {account.monthlyPayment && <span> · {formatCurrency(account.monthlyPayment)}/mo</span>}
+              </>
             : account.expectedReturnRate && <span>{account.expectedReturnRate}% return</span>
           }
           {isRegisteredType(account.type) && account.contributionRoom && (
@@ -487,14 +493,24 @@ function AddForm({ form, filterTypes, returnRateEdited, onChange, onReturnRateEd
         placeholder="e.g., Wealthsimple, TD"
       />
       {isDebt ? (
-        <Input
-          label="Interest Rate (%)"
-          type="number"
-          step="0.01"
-          value={form.interestRate}
-          onChange={e => onChange({ ...form, interestRate: e.target.value })}
-          placeholder="e.g., 5.25"
-        />
+        <>
+          <Input
+            label="Interest Rate (%)"
+            type="number"
+            step="0.01"
+            value={form.interestRate}
+            onChange={e => onChange({ ...form, interestRate: e.target.value })}
+            placeholder="e.g., 5.25"
+          />
+          <Input
+            label="Monthly Payment"
+            type="number"
+            step="0.01"
+            value={form.monthlyPayment}
+            onChange={e => onChange({ ...form, monthlyPayment: e.target.value })}
+            placeholder="e.g., 2500"
+          />
+        </>
       ) : (
         <Input
           label="Expected Annual Return (%)"

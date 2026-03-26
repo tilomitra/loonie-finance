@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
-import { useAccounts, useUserProfile, useLifeEvents } from '@/db/hooks'
+import { useAccounts, useUserProfile } from '@/db/hooks'
 import { db } from '@/db/database'
 import { calculateFirePlan } from '@/engine/retirement/fire-plan'
 import { estimateCppBenefit } from '@/engine/retirement/cpp-benefit'
@@ -16,7 +16,6 @@ import { MilestoneTimeline } from '@/components/fire/MilestoneTimeline'
 import { NextMilestone } from '@/components/fire/NextMilestone'
 import { YearlyBreakdown } from '@/components/fire/YearlyBreakdown'
 import { StatusStrip } from '@/components/fire/StatusStrip'
-import { LifeEventsSection } from '@/components/fire/LifeEventsSection'
 
 type ViewMode = 'self' | 'partner' | 'household'
 
@@ -96,8 +95,6 @@ function generateOptions(start: number, end: number): { value: string; label: st
 export function Fire() {
   const accounts = useAccounts()
   const profile = useUserProfile()
-  const lifeEvents = useLifeEvents()
-
   const [viewMode, setViewMode] = useState<ViewMode>('self')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [selectedFireType, setSelectedFireType] = useState<string | null>(null)
@@ -724,9 +721,8 @@ export function Fire() {
             <YearlyBreakdown
               currentAge={currentAge}
               retirementAge={params.targetFireAge}
-              currentPortfolio={totalAssets}
-              annualContributions={new Decimal(params.annualSavings || '0')}
-              expectedReturnRate={weightedReturnRate}
+              accounts={accounts}
+              annualSavings={new Decimal(params.annualSavings || '0')}
               inflationRate={new Decimal(params.inflationRate || '0.02')}
               fireTargets={plan.fireTypes.map(t => ({
                 type: t.type,
@@ -735,9 +731,6 @@ export function Fire() {
               }))}
             />
           </Card>
-
-          {/* ── Life Events ── */}
-          <LifeEventsSection lifeEvents={lifeEvents} />
 
         </div>
       )}

@@ -22,12 +22,12 @@ describe('buildSystemPrompt', () => {
       {
         id: '1', name: 'TFSA', type: 'tfsa', balance: '25000', currency: 'CAD',
         institution: 'WS', expectedReturnRate: '5.0',
-        contributionRoom: null, interestRate: null, notes: '', createdAt: 0, updatedAt: 0,
+        contributionRoom: null, interestRate: null, monthlyPayment: null, notes: '', createdAt: 0, updatedAt: 0,
       },
       {
         id: '2', name: 'Mortgage', type: 'debt-mortgage', balance: '300000', currency: 'CAD',
         institution: 'TD', expectedReturnRate: '0',
-        contributionRoom: null, interestRate: '4.8', notes: '', createdAt: 0, updatedAt: 0,
+        contributionRoom: null, interestRate: '4.8', monthlyPayment: null, notes: '', createdAt: 0, updatedAt: 0,
       },
     ]
     const netWorth = { netWorth: new Decimal(-275000), totalAssets: new Decimal(25000), totalDebts: new Decimal(300000) }
