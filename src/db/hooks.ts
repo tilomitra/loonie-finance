@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from './database'
 import Decimal from 'decimal.js'
-import { isDebtType, type UserProfile, type LifeEvent, type PartnerProfile } from '@/types'
+import { isDebtType, type UserProfile, type PartnerProfile } from '@/types'
 
 export function useAccounts() {
   return useLiveQuery(() => db.accounts.orderBy('createdAt').toArray(), []) ?? []
@@ -41,10 +41,6 @@ export function useUserProfile(): UserProfile | undefined {
 
 export function useSnapshots() {
   return useLiveQuery(() => db.snapshots.orderBy('date').toArray(), []) ?? []
-}
-
-export function useLifeEvents(): LifeEvent[] {
-  return useLiveQuery(() => db.lifeEvents.toArray(), []) ?? []
 }
 
 export function usePartnerProfile(): PartnerProfile | undefined {

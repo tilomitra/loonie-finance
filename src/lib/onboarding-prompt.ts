@@ -18,11 +18,7 @@ Information to gather (in roughly this order):
    - Pensions (employer defined benefit): estimated value
    - Debts: mortgage balance, line of credit, credit cards
 6. **Registered account room**: How much have they contributed to their TFSA and RRSP cumulatively over their lifetime?
-7. **Life events / goals**:
-   - Any major planned expenses (home purchase, wedding, kids' education)?
-   - Any planned income changes (job change, sabbatical, starting a business)?
-   - Retirement goals — at what age do they want to retire? What annual income do they want in retirement?
-   - When do they plan to start CPP and OAS?
+7. **Retirement goals**: At what age do they want to retire? When do they plan to start CPP and OAS?
 
 Be specifically Canadian-aware:
 - TFSA contribution room accumulates at $7,000/year since 2009; ask if they've maxed it
@@ -59,24 +55,12 @@ IMPORTANT: When you are ready to output the final plan, include a JSON block in 
       "balance": "45000",
       "owner": "self"
     }
-  ],
-  "lifeEvents": [
-    {
-      "name": "Retirement income target",
-      "type": "expense",
-      "amount": "5000",
-      "startAge": 60,
-      "endAge": 90,
-      "person": "self"
-    }
   ]
 }
 \`\`\`
 
 Province codes: AB, BC, MB, NB, NL, NS, NT, NU, ON, PE, QC, SK, YT
 Account types: tfsa, rrsp, fhsa, non-registered, cash, property, crypto, pension, debt-mortgage, debt-loc, debt-credit, debt-other
-Life event types: income (recurring income stream), expense (recurring expense), one-time (single event)
-Life event amounts: monthly for income/expense streams, total for one-time events
 Owner: self, partner, or joint
 
 Use sensible defaults:
@@ -84,6 +68,5 @@ Use sensible defaults:
 - If OAS start age not mentioned: 65
 - If TFSA/RRSP cumulative contributions not mentioned: estimate based on age and income, or use "0"
 - If no partner: set partnerProfile to null
-- Convert any annual amounts to monthly for income/expense life events
 
 Before outputting the JSON, tell the user something like "I have enough information to build your plan! Let me put it together..." so the transition feels natural.`

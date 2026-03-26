@@ -24,7 +24,7 @@ export function WithdrawalPlanView({ plan, accounts }: WithdrawalPlanViewProps) 
   if (!plan || plan.years.length === 0) {
     return (
       <div className="text-center py-8 text-[13px] text-text-secondary">
-        Set up life events and profile data to see your withdrawal plan.
+        Set up your profile data to see your withdrawal plan.
       </div>
     )
   }

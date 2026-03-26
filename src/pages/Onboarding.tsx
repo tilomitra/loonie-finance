@@ -50,12 +50,6 @@ const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   'debt-other': 'Other Debt',
 }
 
-const EVENT_TYPE_LABELS: Record<string, string> = {
-  income: 'Income',
-  expense: 'Expense',
-  'one-time': 'One-time',
-}
-
 // ── Chat Input ────────────────────────────────────────────────────────────────
 
 interface ChatInputProps {
@@ -167,8 +161,6 @@ function PreviewPanel({ result, isStreaming, isReviewing, onUpdate }: PreviewPan
   const profileStatus = result?.userProfile?.dateOfBirth ? 'complete' : isStreaming ? 'in-progress' : 'pending'
   const accountsStatus = result?.accounts?.length ? 'complete' : isStreaming ? 'in-progress' : 'pending'
   const incomeStatus = result?.userProfile?.annualIncome ? 'complete' : isStreaming ? 'in-progress' : 'pending'
-  const eventsStatus = result?.lifeEvents?.length ? 'complete' : isStreaming ? 'in-progress' : 'pending'
-
   const calcAge = (dob: string) => {
     if (!dob) return null
     const today = new Date()
@@ -352,32 +344,6 @@ function PreviewPanel({ result, isStreaming, isReviewing, onUpdate }: PreviewPan
         )}
       </Card>
 
-      {/* Life Events Card */}
-      <Card>
-        <CardHeader className="mb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-[14px]">Life Events & Goals</CardTitle>
-            <StatusBadge status={eventsStatus} />
-          </div>
-        </CardHeader>
-        {result?.lifeEvents?.length ? (
-          <div className="space-y-1.5">
-            {result.lifeEvents.map((evt, i) => (
-              <div key={i} className="flex justify-between text-[13px]">
-                <div>
-                  <span className="text-text">{evt.name}</span>
-                  <span className="ml-1.5 text-[11px] text-text-secondary">
-                    ({EVENT_TYPE_LABELS[evt.type]}, age {evt.startAge}{evt.endAge ? `–${evt.endAge}` : ''})
-                  </span>
-                </div>
-                <span className="font-medium shrink-0 ml-2">{formatCurrency(evt.amount)}/mo</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-[12px] text-text-secondary italic">Waiting for goals...</p>
-        )}
-      </Card>
     </div>
   )
 }

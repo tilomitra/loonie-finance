@@ -12,15 +12,6 @@ export const AccountSchema = z.object({
   owner: z.enum(['self', 'partner', 'joint']).optional().default('self'),
 })
 
-export const LifeEventSchema = z.object({
-  name: z.string(),
-  type: z.enum(['income', 'expense', 'one-time']),
-  amount: z.string(),
-  startAge: z.number().min(0).max(120),
-  endAge: z.number().min(0).max(120).optional(),
-  person: z.enum(['self', 'partner', 'joint']),
-})
-
 export const PartnerProfileSchema = z.object({
   name: z.string(),
   dateOfBirth: z.string(),
@@ -46,9 +37,7 @@ export const OnboardingResultSchema = z.object({
   }),
   partnerProfile: PartnerProfileSchema,
   accounts: z.array(AccountSchema),
-  lifeEvents: z.array(LifeEventSchema),
 })
 
 export type OnboardingResult = z.infer<typeof OnboardingResultSchema>
 export type OnboardingAccount = z.infer<typeof AccountSchema>
-export type OnboardingLifeEvent = z.infer<typeof LifeEventSchema>

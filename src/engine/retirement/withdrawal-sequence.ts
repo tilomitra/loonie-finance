@@ -1,10 +1,9 @@
 import Decimal from 'decimal.js'
-import type { Account, AccountType, Province, LifeEvent } from '@/types'
+import type { Account, AccountType, Province } from '@/types'
 import { estimateCppBenefit } from './cpp-benefit'
 import { estimateOasBenefit } from './oas-benefit'
 import { calculateRrifMinimum } from './rrif-rules'
 import { CapitalGainsTracker } from './capital-gains-tracker'
-import { buildAnnualCashFlows } from '../projection/cash-flow-builder'
 import { calculateTotalTax } from '../tax/calculate-tax'
 import { OAS_2026 } from '../constants/oas'
 import { FEDERAL_TAX_2026 } from '../constants/tax-brackets-2026'
@@ -19,7 +18,6 @@ export interface WithdrawalProfileInput {
 
 export interface WithdrawalSequenceInput {
   accounts: Account[]
-  lifeEvents: LifeEvent[]
   selfProfile: WithdrawalProfileInput
   partnerProfile?: WithdrawalProfileInput
   retirementAge: number
@@ -67,15 +65,13 @@ const OAS_CLAWBACK_RATE = new Decimal(OAS_2026.clawbackRate)
  * Strategy (greedy, year-by-year):
  * 1. Enforce RRIF mandatory minimums (age >= 72)
  * 2. Layer in CPP and OAS government income
- * 3. Apply life event cash flows
- * 4. Fill spending gap in tax-optimal order: TFSA -> Non-Reg -> RRSP/RRIF
+ * 3. Fill spending gap in tax-optimal order: TFSA -> Non-Reg -> RRSP/RRIF
  * 5. Optionally melt down RRSP in low-income years before 65
  * 6. Grow remaining balances by expected return rate
  */
 export function calculateWithdrawalPlan(input: WithdrawalSequenceInput): WithdrawalPlan {
   const {
     accounts,
-    lifeEvents,
     selfProfile,
     partnerProfile,
     retirementAge,
@@ -96,14 +92,7 @@ export function calculateWithdrawalPlan(input: WithdrawalSequenceInput): Withdra
       ? partnerProfile.currentAge + (retirementAge - selfProfile.currentAge)
       : undefined
 
-  // Pre-build life event cash flows (indexed by year offset from retirementAge)
   const yearsToProject = lifeExpectancy - retirementAge
-  const cashFlows = buildAnnualCashFlows(
-    lifeEvents,
-    retirementAge,
-    partnerAgeAtRetirement,
-    yearsToProject
-  )
 
   // Initialize mutable account balances
   const balances: Record<string, Decimal> = {}
@@ -187,25 +176,11 @@ export function calculateWithdrawalPlan(input: WithdrawalSequenceInput): Withdra
       taxableIncome = taxableIncome.plus(grossOasAnnual)
     }
 
-    // -- Step 3: Life event cash flows --
-    const cashFlow = cashFlows.get(yearOffset)
-    if (cashFlow) {
-      if (cashFlow.incomeStreams.gt(0)) {
-        incomeStreams.push({ source: 'life-events-income', amount: cashFlow.incomeStreams })
-        taxableIncome = taxableIncome.plus(cashFlow.incomeStreams)
-      }
-      if (cashFlow.oneTimeInflows.gt(0)) {
-        incomeStreams.push({ source: 'life-events-one-time', amount: cashFlow.oneTimeInflows })
-        taxableIncome = taxableIncome.plus(cashFlow.oneTimeInflows)
-      }
-    }
-
-    // -- Step 4: Calculate spending need --
+    // -- Step 3: Calculate spending need --
     const inflatedExpenses = annualExpenses.times(
       inflationRate.plus(1).pow(yearOffset)
     )
-    const lifeEventExpenses = cashFlow ? cashFlow.expenseStreams : new Decimal(0)
-    const totalExpenses = inflatedExpenses.plus(lifeEventExpenses)
+    const totalExpenses = inflatedExpenses
 
     const rrifMinimumTotal = withdrawals.reduce(
       (sum, w) => (w.reason === 'rrif-minimum' ? sum.plus(w.amount) : sum),
@@ -218,7 +193,7 @@ export function calculateWithdrawalPlan(input: WithdrawalSequenceInput): Withdra
     const totalAvailableIncome = incomeStreamTotal.plus(rrifMinimumTotal)
     let spendingGap = totalExpenses.minus(totalAvailableIncome)
 
-    // -- Step 5: Fill spending gap in tax-optimal order --
+    // -- Step 4: Fill spending gap in tax-optimal order --
     if (spendingGap.gt(0)) {
       // 5a. TFSA first (tax-free)
       for (const account of selfAccounts) {
@@ -283,7 +258,7 @@ export function calculateWithdrawalPlan(input: WithdrawalSequenceInput): Withdra
       }
     }
 
-    // -- Step 6: RRSP meltdown --
+    // -- Step 5: RRSP meltdown --
     if (age < 65 && taxableIncome.lt(FIRST_BRACKET_CEILING)) {
       const headroom = FIRST_BRACKET_CEILING.minus(taxableIncome)
       for (const account of selfAccounts) {
@@ -306,7 +281,7 @@ export function calculateWithdrawalPlan(input: WithdrawalSequenceInput): Withdra
       }
     }
 
-    // -- Step 7: OAS clawback calculation --
+    // -- Step 6: OAS clawback calculation --
     let oasClawback = new Decimal(0)
     if (age >= selfProfile.oasStartAge && taxableIncome.gt(OAS_CLAWBACK_THRESHOLD)) {
       oasClawback = taxableIncome
@@ -315,18 +290,18 @@ export function calculateWithdrawalPlan(input: WithdrawalSequenceInput): Withdra
       oasClawback = Decimal.min(oasClawback, grossOasAnnual)
     }
 
-    // -- Step 8: Tax calculation --
+    // -- Step 7: Tax calculation --
     const taxResult = calculateTotalTax(taxableIncome, selfProfile.province)
     const totalTax = taxResult.totalTax
 
-    // -- Step 9: After-tax income --
+    // -- Step 8: After-tax income --
     const allWithdrawals = withdrawals.reduce((sum, w) => sum.plus(w.amount), new Decimal(0))
     const afterTaxIncome = incomeStreamTotal
       .plus(allWithdrawals)
       .minus(totalTax)
       .minus(oasClawback)
 
-    // -- Step 10: Grow remaining balances --
+    // -- Step 9: Grow remaining balances --
     for (const account of selfAccounts) {
       const balance = balances[account.id]
       if (balance.gt(0)) {
@@ -346,7 +321,7 @@ export function calculateWithdrawalPlan(input: WithdrawalSequenceInput): Withdra
       }
     }
 
-    // -- Step 11: Record year --
+    // -- Step 10: Record year --
     const accountBalancesSnapshot: Record<string, Decimal> = {}
     for (const account of selfAccounts) {
       accountBalancesSnapshot[account.id] = balances[account.id]
