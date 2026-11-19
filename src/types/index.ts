@@ -1,135 +1,107 @@
 export type Province = 'AB' | 'BC' | 'MB' | 'NB' | 'NL' | 'NS' | 'NT' | 'NU' | 'ON' | 'PE' | 'QC' | 'SK' | 'YT'
 
-export type AccountType =
-  | 'tfsa' | 'rrsp' | 'fhsa' | 'non-registered' | 'cash'
-  | 'property' | 'crypto' | 'pension'
-  | 'debt-mortgage' | 'debt-loc' | 'debt-credit' | 'debt-other'
+export const PROVINCE_LABELS: Record<Province, string> = {
+  AB: 'Alberta',
+  BC: 'British Columbia',
+  MB: 'Manitoba',
+  NB: 'New Brunswick',
+  NL: 'Newfoundland and Labrador',
+  NS: 'Nova Scotia',
+  NT: 'Northwest Territories',
+  NU: 'Nunavut',
+  ON: 'Ontario',
+  PE: 'Prince Edward Island',
+  QC: 'Quebec',
+  SK: 'Saskatchewan',
+  YT: 'Yukon',
+}
 
-export type Currency = 'CAD' | 'USD'
+/** Investment account types that matter for a Canadian FIRE plan. */
+export type AccountType =
+  | 'tfsa'
+  | 'rrsp'
+  | 'rrif'
+  | 'lira'
+  | 'fhsa'
+  | 'resp'
+  | 'non-registered'
+  | 'cash'
+  | 'pension'
+  | 'other'
+
+export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
+  tfsa: 'TFSA',
+  rrsp: 'RRSP',
+  rrif: 'RRIF',
+  lira: 'LIRA / Locked-in',
+  fhsa: 'FHSA',
+  resp: 'RESP',
+  'non-registered': 'Non-registered',
+  cash: 'Cash / Savings',
+  pension: 'Pension (DC)',
+  other: 'Other',
+}
+
+/** Withdrawals from these accounts are fully taxable income. */
+export function isTaxDeferred(type: AccountType): boolean {
+  return type === 'rrsp' || type === 'rrif' || type === 'lira' || type === 'pension'
+}
+
+/** By default, money for a home or a child's education is not retirement money. */
+export function includeInFireByDefault(type: AccountType): boolean {
+  return type !== 'fhsa' && type !== 'resp'
+}
+
+export type Institution = 'wealthsimple' | 'td' | 'other'
+
+export const INSTITUTION_LABELS: Record<Institution, string> = {
+  wealthsimple: 'Wealthsimple',
+  td: 'TD',
+  other: 'Other',
+}
 
 export interface Account {
   id: string
   name: string
+  institution: Institution
   type: AccountType
-  balance: string // decimal string
-  currency: Currency
-  institution: string
-  expectedReturnRate: string // annual return % as decimal string (e.g., '5.0')
-  contributionRoom: string | null
-  interestRate: string | null
-  monthlyPayment: string | null // monthly payment for debt accounts
-  notes: string
-  owner?: 'self' | 'partner' | 'joint'
-  createdAt: number
+  /** Balance in CAD, as a decimal string. */
+  balance: string
+  /** Count this account toward the FIRE portfolio. */
+  includeInFire: boolean
+  /** Key used to match the same account on a later import (for example, the account number). */
+  importKey?: string
   updatedAt: number
 }
 
-export interface BalanceHistory {
-  id: string
-  accountId: string
-  balance: string
-  date: string // YYYY-MM-DD
-  source: 'manual' | 'import'
-}
-
-export interface MonthlyContribution {
-  accountId: string
-  amount: string
-}
-
-export interface ScenarioAssumptions {
-  inflationRate: string
-  salaryGrowthRate: string
+/** All plan inputs. Money values are in today's dollars, as decimal strings. */
+export interface Plan {
+  id: 'singleton'
+  currentAge: number
+  /** Age when you stop all work. */
   retirementAge: number
   lifeExpectancy: number
+  province: Province
+  /** After-tax yearly spending in retirement. */
+  annualSpending: string
+  /** Yearly amount you add to your investments while you work. */
+  annualContribution: string
+  /** Expected nominal yearly return, percent. */
+  expectedReturn: string
+  /** Expected yearly inflation, percent. */
+  inflation: string
+  /** Safe withdrawal rate, percent. */
+  withdrawalRate: string
+  /** Gross up spending for income tax on withdrawals. */
+  includeTax: boolean
+  /** Your CPP estimate at age 65, monthly, from My Service Canada Account. */
+  cppAt65Monthly: string
   cppStartAge: number
+  /** Years you will have lived in Canada after age 18, by age 65. */
+  oasResidenceYears: number
   oasStartAge: number
-  province: Province
-  annualIncome: string
-  annualExpenses: string
-  annualSavingsRate: string
-  monthlyContributions: MonthlyContribution[]
-}
-
-export interface Scenario {
-  id: string
-  name: string
-  isDefault: boolean
-  assumptions: ScenarioAssumptions
-  createdAt: number
+  /** Defined-benefit pension, yearly, in today's dollars. */
+  pensionAnnual: string
+  pensionStartAge: number
   updatedAt: number
-}
-
-export interface PartnerProfile {
-  name: string
-  dateOfBirth: string                   // YYYY-MM-DD
-  province: Province
-  annualIncome: string
-  yearsContributedCPP: number
-  cppStartAge: number
-  oasStartAge: number
-  tfsaCumulativeContributions: string
-  rrspCumulativeContributions: string
-}
-
-export interface UserProfile {
-  id: string // always 'singleton'
-  dateOfBirth: string // YYYY-MM-DD
-  province: Province
-  annualIncome: string
-  yearsContributedCPP: number
-  tfsaCumulativeContributions: string
-  rrspCumulativeContributions: string
-  fhsaCumulativeContributions: string
-  fhsaFirstHomeOwner: boolean
-  openaiApiKey?: string
-  partnerProfile?: PartnerProfile
-  createdAt: number
-  updatedAt: number
-}
-
-export interface Snapshot {
-  id: string
-  date: string
-  netWorth: string
-  totalAssets: string
-  totalDebts: string
-  accountBalances: { accountId: string; balance: string }[]
-}
-
-export type FireType = 'lean' | 'regular' | 'fat' | 'coast' | 'barista'
-
-export interface ProjectionPoint {
-  year: number
-  age: number
-  netWorth: string
-  totalAssets: string
-  totalDebts: string
-  accountBreakdown: Record<string, string>
-}
-
-// Helper to check if an account type is a debt
-export function isDebtType(type: AccountType): boolean {
-  return type.startsWith('debt-')
-}
-
-// Helper to check if account is registered
-export function isRegisteredType(type: AccountType): boolean {
-  return type === 'tfsa' || type === 'rrsp' || type === 'fhsa'
-}
-
-// Display names for account types
-export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
-  'tfsa': 'TFSA',
-  'rrsp': 'RRSP',
-  'fhsa': 'FHSA',
-  'non-registered': 'Non-Registered',
-  'cash': 'Cash / Savings',
-  'property': 'Real Estate',
-  'crypto': 'Cryptocurrency',
-  'pension': 'Pension',
-  'debt-mortgage': 'Mortgage',
-  'debt-loc': 'Line of Credit',
-  'debt-credit': 'Credit Card',
-  'debt-other': 'Other Debt',
 }

@@ -1,0 +1,8 @@
+"Account Name","Account Type","Account Classification","Account Number","Symbol","Exchange","MIC","Name","Security Type","Quantity","Position Direction","Entry Price","Entry Price Currency","Book Value (CAD)","Book Value Currency (CAD)","Book Value (Market)","Book Value Currency (Market)","Market Price","Market Price Currency","Market Price Date","Market Value","Market Value Currency","Market Unrealized Returns","Market Unrealized Returns Currency"
+"TFSA","TFSA","Self Directed","HQ1234567CAD","XEQT","TSX","XTSE","iShares Core Equity ETF Portfolio","EXCHANGE_TRADED_FUND","1000","LONG","25.00","CAD","25000.00","CAD","25000.00","CAD","35.50","CAD","2026-11-18","35500.00","CAD","10500.00","CAD"
+"TFSA","TFSA","Self Directed","HQ1234567CAD","VFV","TSX","XTSE","Vanguard S&P 500 Index ETF","EXCHANGE_TRADED_FUND","100","LONG","100.00","CAD","10000.00","CAD","10000.00","CAD","150.00","CAD","2026-11-18","15000.00","CAD","5000.00","CAD"
+"RRSP","RRSP","Self Directed","HQ7654321CAD","VTI","NYSE ARCA","ARCX","Vanguard Total Stock Market ETF","EXCHANGE_TRADED_FUND","50","LONG","200.00","USD","13500.00","CAD","10000.00","USD","300.00","USD","2026-11-18","15000.00","USD","5000.00","USD"
+"Non-registered","Personal","Self Directed","HQ1111111CAD","XBAL","TSX","XTSE","iShares Core Balanced ETF Portfolio","EXCHANGE_TRADED_FUND","200","LONG","28.00","CAD","5600.00","CAD","5600.00","CAD","32.00","CAD","2026-11-18","6400.00","CAD","800.00","CAD"
+"FHSA","FHSA","Self Directed","HQ2222222CAD","XEQT","TSX","XTSE","iShares Core Equity ETF Portfolio","EXCHANGE_TRADED_FUND","300","LONG","30.00","CAD","9000.00","CAD","9000.00","CAD","35.50","CAD","2026-11-18","10650.00","CAD","1650.00","CAD"
+
+"As of 2026-11-18 16:00 ET"
