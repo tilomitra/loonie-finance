@@ -1,69 +1,39 @@
 import Dexie, { type Table } from 'dexie'
-import type { Account, BalanceHistory, Scenario, UserProfile, Snapshot } from '@/types'
-import { DEFAULT_RETURN_RATES } from '@/engine/projection/account-defaults'
-import type { AccountType } from '@/types'
+import type { Account, Plan } from '@/types'
 
 export class LoonieDatabase extends Dexie {
   accounts!: Table<Account, string>
-  balanceHistory!: Table<BalanceHistory, string>
-  scenarios!: Table<Scenario, string>
-  userProfile!: Table<UserProfile, string>
-  snapshots!: Table<Snapshot, string>
+  plan!: Table<Plan, string>
 
   constructor() {
-    super('loonie-finance')
-
+    // New database name: the FIRE calculator does not reuse the old net-worth schema.
+    super('loonie-fire')
     this.version(1).stores({
-      accounts: 'id, type, createdAt',
-      balanceHistory: 'id, accountId, date',
-      scenarios: 'id, isDefault',
-      userProfile: 'id',
-      snapshots: 'id, date',
-    })
-
-    // v2: Replace assetAllocation with expectedReturnRate
-    this.version(2).stores({
-      accounts: 'id, type, createdAt',
-      balanceHistory: 'id, accountId, date',
-      scenarios: 'id, isDefault',
-      userProfile: 'id',
-      snapshots: 'id, date',
-    }).upgrade(tx => {
-      return tx.table('accounts').toCollection().modify(account => {
-        const type = account.type as AccountType
-        account.expectedReturnRate = DEFAULT_RETURN_RATES[type] ?? '5.0'
-        delete (account as Record<string, unknown>).assetAllocation
-      })
-    })
-
-    // v3: Add lifeEvents table and set owner on existing accounts
-    this.version(3).stores({
-      accounts: 'id, type, createdAt',
-      balanceHistory: 'id, accountId, date',
-      scenarios: 'id, isDefault',
-      userProfile: 'id',
-      snapshots: 'id, date',
-      lifeEvents: 'id, type, person, startAge',
-    }).upgrade(tx => {
-      return tx.table('accounts').toCollection().modify(account => {
-        account.owner = 'self'
-      })
-    })
-
-    // v4: Add monthlyPayment field to accounts
-    this.version(4).stores({
-      accounts: 'id, type, createdAt',
-      balanceHistory: 'id, accountId, date',
-      scenarios: 'id, isDefault',
-      userProfile: 'id',
-      snapshots: 'id, date',
-      lifeEvents: 'id, type, person, startAge',
-    }).upgrade(tx => {
-      return tx.table('accounts').toCollection().modify(account => {
-        account.monthlyPayment = null
-      })
+      accounts: 'id, importKey, institution, type',
+      plan: 'id',
     })
   }
 }
 
 export const db = new LoonieDatabase()
+
+export const DEFAULT_PLAN: Plan = {
+  id: 'singleton',
+  currentAge: 30,
+  retirementAge: 60,
+  lifeExpectancy: 95,
+  province: 'ON',
+  annualSpending: '50000',
+  annualContribution: '15000',
+  expectedReturn: '6',
+  inflation: '2.5',
+  withdrawalRate: '4',
+  includeTax: true,
+  cppAt65Monthly: '900',
+  cppStartAge: 65,
+  oasResidenceYears: 40,
+  oasStartAge: 65,
+  pensionAnnual: '0',
+  pensionStartAge: 65,
+  updatedAt: 0,
+}

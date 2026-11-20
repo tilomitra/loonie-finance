@@ -1,67 +1,16 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { db } from './database'
-import Decimal from 'decimal.js'
-import { isDebtType, type UserProfile, type PartnerProfile } from '@/types'
+import { db, DEFAULT_PLAN } from './database'
+import type { Account, Plan } from '@/types'
 
-export function useAccounts() {
-  return useLiveQuery(() => db.accounts.orderBy('createdAt').toArray(), []) ?? []
+export function useAccounts(): Account[] | undefined {
+  return useLiveQuery(() => db.accounts.orderBy('institution').toArray(), [])
 }
 
-export function useAccount(id: string | undefined) {
-  return useLiveQuery(
-    () => (id ? db.accounts.get(id) : undefined),
-    [id]
-  )
+/** Returns undefined while loading, then the saved plan or the defaults. */
+export function usePlan(): Plan | undefined {
+  return useLiveQuery(async () => (await db.plan.get('singleton')) ?? DEFAULT_PLAN, [])
 }
 
-export function useBalanceHistory(accountId: string | undefined) {
-  return useLiveQuery(
-    () =>
-      accountId
-        ? db.balanceHistory.where('accountId').equals(accountId).sortBy('date')
-        : [],
-    [accountId]
-  ) ?? []
-}
-
-export function useScenarios() {
-  return useLiveQuery(() => db.scenarios.toArray(), []) ?? []
-}
-
-export function useDefaultScenario() {
-  return useLiveQuery(
-    () => db.scenarios.where('isDefault').equals(1).first(),
-    []
-  )
-}
-
-export function useUserProfile(): UserProfile | undefined {
-  return useLiveQuery(() => db.userProfile.get('singleton'), [])
-}
-
-export function useSnapshots() {
-  return useLiveQuery(() => db.snapshots.orderBy('date').toArray(), []) ?? []
-}
-
-export function usePartnerProfile(): PartnerProfile | undefined {
-  return useLiveQuery(
-    () => db.userProfile.get('singleton').then(profile => profile?.partnerProfile),
-    []
-  )
-}
-
-export function useNetWorth() {
-  const accounts = useAccounts()
-
-  const totalAssets = accounts
-    .filter(a => !isDebtType(a.type))
-    .reduce((sum, a) => sum.plus(new Decimal(a.balance || '0')), new Decimal(0))
-
-  const totalDebts = accounts
-    .filter(a => isDebtType(a.type))
-    .reduce((sum, a) => sum.plus(new Decimal(a.balance || '0')), new Decimal(0))
-
-  const netWorth = totalAssets.minus(totalDebts)
-
-  return { netWorth, totalAssets, totalDebts }
+export async function savePlan(plan: Plan) {
+  await db.plan.put({ ...plan, id: 'singleton', updatedAt: Date.now() })
 }
